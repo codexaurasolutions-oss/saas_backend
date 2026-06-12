@@ -297,6 +297,7 @@ model Salon {
   incentiveRules      IncentiveRule[]
   payrollRuns         PayrollRun[]
   payrollItems        PayrollItem[]
+  websiteConfig       WebsiteConfig?
   notifications       Notification[]
   auditLogs           AuditLog[]
   campaignTemplates   CampaignTemplate[]
@@ -320,6 +321,15 @@ model UserSalon {
   showInCatalog        Boolean                   @default(false)
   isArchived           Boolean                   @default(false)
   permissions          Json?
+  joiningDate          DateTime?
+  designation          String?
+  uanNumber            String?
+  reportingToId        String?
+  workingHours         String?
+  bankName             String?
+  bankBranch           String?
+  accountNumber        String?
+  ifscCode             String?
   user                 User                      @relation(fields: [userId], references: [id])
   salon                Salon                     @relation(fields: [salonId], references: [id])
   branch               Branch?                   @relation(fields: [branchId], references: [id])
@@ -466,16 +476,19 @@ model ServiceCategory {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   salon     Salon    @relation(fields: [salonId], references: [id])
+  services  Service[]
 }
 
 model Service {
   id                   String                    @id @default(cuid())
   salonId              String
   branchId             String?
+  categoryId           String?
   name                 String
   price                Decimal                   @db.Decimal(10, 2)
   durationMin          Int
   description          String?
+  gender               String?
   taxRate              Decimal?                  @db.Decimal(5, 2)
   onlineBookingEnabled Boolean                   @default(false)
   commissionPct        Decimal?                  @db.Decimal(5, 2)
@@ -486,6 +499,7 @@ model Service {
   createdAt            DateTime                  @default(now())
   salon                Salon                     @relation(fields: [salonId], references: [id])
   branch               Branch?                   @relation(fields: [branchId], references: [id])
+  category             ServiceCategory?          @relation(fields: [categoryId], references: [id])
   staffAssignments     StaffServiceAssignment[]
   appointmentItems     AppointmentService[]
   membershipPlans      MembershipPlanService[]
@@ -580,6 +594,18 @@ model Invoice {
   campaignConversions  CampaignConversion[]
 }
 
+model WebsiteConfig {
+  id           String   @id @default(cuid())
+  salonId      String   @unique
+  heroTitle    String?  @db.Text
+  heroSubtitle String?  @db.Text
+  heroImage    String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  salon Salon @relation(fields: [salonId], references: [id])
+}
+
 model InvoiceItem {
   id                  String           @id @default(cuid())
   invoiceId           String
@@ -600,6 +626,7 @@ model InvoiceItem {
   packageSessionsUsed Int?             @default(0)
   membershipWalletUsed Decimal?        @db.Decimal(10, 2)
   commissionAmount    Decimal?         @db.Decimal(10, 2)
+  tipAmount           Decimal          @default(0) @db.Decimal(10, 2)
   invoice             Invoice          @relation(fields: [invoiceId], references: [id])
   product             Product?         @relation(fields: [productId], references: [id])
   membershipPlan      MembershipPlan?  @relation(fields: [membershipPlanId], references: [id])
@@ -916,6 +943,8 @@ model MembershipPlan {
   id                  String                  @id @default(cuid())
   salonId             String
   name                String
+  description         String?
+  benefits            Json?
   price               Decimal                 @db.Decimal(10, 2)
   validityDays        Int
   benefitType         MembershipBenefitType
@@ -1342,6 +1371,8 @@ model SalonSetting {
   bookingNotes           String?
   cancellationPolicy     String?
   paymentGatewaySettings Json?
+  advancedSettings       Json?
+  smsSettings            Json?
   allowNegativeStock     Boolean  @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt

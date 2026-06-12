@@ -59,14 +59,46 @@ export const registerEcommerceRoutes = (ownerRouter) => {
 
   ownerRouter.get("/orders", requireFeatureEnabled("onlineOrders"), requireSalonPermission("orders", "view"), async (req, res) => {
     const status = req.query.status ? String(req.query.status) : null;
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+    const dateFilter = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    
     res.json(await prisma.onlineOrder.findMany({
-      where: { salonId: req.salonId, ...(status ? { status } : {}) },
+      where: { 
+        salonId: req.salonId, 
+        ...(status ? { status } : {}),
+        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+      },
       include: includeOrder,
       orderBy: { createdAt: "desc" }
     }));
   });
+  
   ownerRouter.get("/orders/reports/summary", requireFeatureEnabled("onlineOrders"), requireSalonPermission("orders", "view"), async (req, res) => {
-    const rows = await prisma.onlineOrder.findMany({ where: { salonId: req.salonId }, include: { items: true } });
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+    const dateFilter = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+
+    const rows = await prisma.onlineOrder.findMany({ 
+      where: { 
+        salonId: req.salonId,
+        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+      }, 
+      include: { items: true } 
+    });
+    
     res.json({
       totalOrders: rows.length,
       newOrders: rows.filter((row) => row.status === "NEW").length,

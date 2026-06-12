@@ -61,6 +61,33 @@ export const registerEnquiryRoutes = (ownerRouter) => {
     res.status(201).json(row);
   });
 
+  ownerRouter.get("/enquiries/follow-ups", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
+    res.json(await prisma.enquiryFollowUp.findMany({
+      where: { enquiry: { salonId: req.salonId } },
+      include: { enquiry: true, actorMembership: { include: { user: true } } },
+      orderBy: { createdAt: "desc" }
+    }));
+  });
+
+  ownerRouter.get("/enquiries/reports", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
+    const rows = await prisma.enquiry.findMany({ where: { salonId: req.salonId }, include: { interestedBranch: true, interestedService: true } });
+    const statusBreakdown = rows.reduce((acc, row) => {
+      acc[row.status] = (acc[row.status] || 0) + 1;
+      return acc;
+    }, {});
+    const sourceBreakdown = rows.reduce((acc, row) => {
+      acc[row.source] = (acc[row.source] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({
+      total: rows.length,
+      converted: rows.filter((row) => row.status === "CONVERTED").length,
+      statusBreakdown,
+      sourceBreakdown,
+      rows
+    });
+  });
+
   ownerRouter.get("/enquiries/:id", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
     const row = await prisma.enquiry.findFirst({
       where: { id: req.params.id, salonId: req.salonId },
@@ -193,30 +220,4 @@ export const registerEnquiryRoutes = (ownerRouter) => {
     res.status(201).json(appointment);
   });
 
-  ownerRouter.get("/enquiries/follow-ups", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
-    res.json(await prisma.enquiryFollowUp.findMany({
-      where: { enquiry: { salonId: req.salonId } },
-      include: { enquiry: true, actorMembership: { include: { user: true } } },
-      orderBy: { createdAt: "desc" }
-    }));
-  });
-
-  ownerRouter.get("/enquiries/reports", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
-    const rows = await prisma.enquiry.findMany({ where: { salonId: req.salonId }, include: { interestedBranch: true, interestedService: true } });
-    const statusBreakdown = rows.reduce((acc, row) => {
-      acc[row.status] = (acc[row.status] || 0) + 1;
-      return acc;
-    }, {});
-    const sourceBreakdown = rows.reduce((acc, row) => {
-      acc[row.source] = (acc[row.source] || 0) + 1;
-      return acc;
-    }, {});
-    res.json({
-      total: rows.length,
-      converted: rows.filter((row) => row.status === "CONVERTED").length,
-      statusBreakdown,
-      sourceBreakdown,
-      rows
-    });
-  });
 };

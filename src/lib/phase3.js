@@ -6,7 +6,7 @@ const publicFeatureEnabled = (flags = {}, key) => flags?.[key] !== false;
 
 export const defaultCatalogTheme = "#0f766e";
 
-export const buildCatalogLink = (slug) => `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/salon/${slug}`;
+export const buildCatalogLink = (slug) => `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/site/${slug}`;
 
 export const normalizeBeforeAfterGallery = (value) => {
   if (!Array.isArray(value)) return [];
@@ -27,6 +27,25 @@ export const buildWhatsAppLink = (phone, message) => {
   if (!phone) return null;
   const normalized = String(phone).replace(/[^\d+]/g, "");
   return `https://wa.me/${encodeURIComponent(normalized)}?text=${encodeURIComponent(message || "")}`;
+};
+
+const resolveSegmentAudience = async (salonId, audienceMeta = {}) => {
+  const segmentId = audienceMeta?.segmentId ? String(audienceMeta.segmentId) : "";
+  if (!segmentId) return [];
+  const settingsRow = await prisma.salonSetting.findFirst({
+    where: { salonId, branchId: null },
+    select: { advancedSettings: true }
+  });
+  const advancedSettings = settingsRow?.advancedSettings && typeof settingsRow.advancedSettings === "object" ? settingsRow.advancedSettings : {};
+  const crmSegments = Array.isArray(advancedSettings.crmSegments) ? advancedSettings.crmSegments : [];
+  const segment = crmSegments.find((item) => String(item?.id) === segmentId && item?.active !== false);
+  if (!segment) return [];
+
+  const filterType = String(segment.filterType || "ALL_CUSTOMERS");
+  if (filterType === "SERVICE_BASED_CUSTOMERS") {
+    return getCampaignAudience(salonId, filterType, { serviceId: segment.serviceId || "" });
+  }
+  return getCampaignAudience(salonId, filterType, {});
 };
 
 export const ensurePublicBookingEnabled = async (salonId, branchId = null) => {
@@ -178,7 +197,7 @@ export const getPublicCatalogData = async (slug) => {
     visibility.staff
       ? prisma.userSalon.findMany({
           where: { salonId: salon.id, showInCatalog: true, isArchived: false, user: { isActive: true } },
-          include: { user: true, branch: true, serviceAssignments: { include: { service: true } } },
+          include: { user: true, branch: true, serviceAssignments: { include: { service: { include: { category: true } } } } },
           orderBy: { id: "desc" }
         })
       : [],
@@ -209,6 +228,62 @@ export const getPublicCatalogData = async (slug) => {
     ),
     storeEnabled: Boolean(publicFeatureEnabled(salon.featureFlags, "ecommerce") !== false && ecommerceSettings?.storeEnabled)
   };
+};
+
+export const getCampaignAudience = async (salonId, audienceFilter, audienceMeta = {}) => {
+  const normalizedFilter = String(audienceFilter || "ALL_CUSTOMERS");
+  if (normalizedFilter === "CRM_SEGMENT") {
+    return resolveSegmentAudience(salonId, audienceMeta);
+  }
+
+  const customers = await prisma.customer.findMany({
+    where: { salonId },
+    include: {
+      invoices: { select: { createdAt: true, total: true } },
+      customerMemberships: { select: { id: true, status: true } },
+      customerPackages: { select: { id: true, status: true } }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  if (normalizedFilter === "ALL_CUSTOMERS") return customers;
+
+  const now = new Date();
+  if (normalizedFilter === "BIRTHDAY_CUSTOMERS") {
+    return customers.filter((customer) => customer.dateOfBirth && new Date(customer.dateOfBirth).getMonth() === now.getMonth());
+  }
+  if (normalizedFilter === "ANNIVERSARY_CUSTOMERS") {
+    return customers.filter((customer) => customer.anniversary && new Date(customer.anniversary).getMonth() === now.getMonth());
+  }
+  if (normalizedFilter === "LOST_CUSTOMERS") {
+    const lostWindow = new Date();
+    lostWindow.setDate(lostWindow.getDate() - 60);
+    return customers.filter((customer) => !customer.lastVisitAt || new Date(customer.lastVisitAt) < lostWindow);
+  }
+  if (normalizedFilter === "HIGH_SPENDERS") {
+    return customers.filter((customer) => Number(customer.totalSpend || 0) >= 5000);
+  }
+  if (normalizedFilter === "MEMBERSHIP_CUSTOMERS") {
+    return customers.filter((customer) => (customer.customerMemberships || []).some((row) => row.status === "ACTIVE"));
+  }
+  if (normalizedFilter === "PACKAGE_CUSTOMERS") {
+    return customers.filter((customer) => (customer.customerPackages || []).some((row) => row.status === "ACTIVE"));
+  }
+  if (normalizedFilter === "SERVICE_BASED_CUSTOMERS") {
+    const serviceId = audienceMeta?.serviceId ? String(audienceMeta.serviceId) : "";
+    if (!serviceId) return [];
+    const matchingInvoices = await prisma.invoiceItem.findMany({
+      where: {
+        itemType: "SERVICE",
+        serviceId
+      },
+      select: { invoice: { select: { customerId: true } } }
+    });
+    const customerIds = [...new Set(matchingInvoices.map((row) => row.invoice?.customerId).filter(Boolean))];
+    return customers.filter((customer) => customerIds.includes(customer.id));
+  }
+
+  return customers;
 };
 
 export const trackCatalogEvent = async ({ slug, body }) => {
@@ -573,7 +648,7 @@ export const convertOrderToInvoice = async ({ salonId, orderId, actorUser }) => 
 
 const templateFallbacks = {
   customer_name: "Customer",
-  salon_name: "ReSpark Salon",
+  salon_name: "Skillify Salon",
   appointment_date_time: "N/A",
   invoice_amount: "0.00",
   membership_expiry: "N/A",
@@ -631,40 +706,4 @@ export const resolveTemplateContext = async (salonId, context = {}) => {
     catalogLink: resolved.catalog_link,
     paymentLink: resolved.payment_link
   };
-};
-
-export const getCampaignAudience = async (salonId, audienceFilter, audienceMeta = {}) => {
-  const now = new Date();
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-  const where = { salonId };
-
-  if (audienceFilter === "BIRTHDAY_CUSTOMERS") {
-    return prisma.customer.findMany({ where, orderBy: { createdAt: "desc" } }).then((rows) => rows.filter((row) => row.dateOfBirth && new Date(row.dateOfBirth).getMonth() === now.getMonth()));
-  }
-  if (audienceFilter === "ANNIVERSARY_CUSTOMERS") {
-    return prisma.customer.findMany({ where, orderBy: { createdAt: "desc" } }).then((rows) => rows.filter((row) => row.anniversary && new Date(row.anniversary).getMonth() === now.getMonth()));
-  }
-  if (audienceFilter === "LOST_CUSTOMERS") {
-    return prisma.customer.findMany({ where: { ...where, OR: [{ lastVisitAt: null }, { lastVisitAt: { lte: ninetyDaysAgo } }] } });
-  }
-  if (audienceFilter === "HIGH_SPENDERS") {
-    return prisma.customer.findMany({ where: { ...where, totalSpend: { gte: 10000 } } });
-  }
-  if (audienceFilter === "MEMBERSHIP_CUSTOMERS") {
-    return prisma.customer.findMany({ where: { ...where, memberships: { some: { status: "ACTIVE", endsAt: { gte: now } } } } });
-  }
-  if (audienceFilter === "PACKAGE_CUSTOMERS") {
-    return prisma.customer.findMany({ where: { ...where, packages: { some: { status: "ACTIVE", endsAt: { gte: now } } } } });
-  }
-  if (audienceFilter === "SERVICE_BASED_CUSTOMERS") {
-    const serviceId = audienceMeta?.serviceId;
-    if (!serviceId) return [];
-    return prisma.customer.findMany({
-      where: {
-        ...where,
-        appointments: { some: { items: { some: { serviceId } } } }
-      }
-    });
-  }
-  return prisma.customer.findMany({ where, orderBy: { createdAt: "desc" } });
 };

@@ -11,6 +11,8 @@ const fieldLabelAliases = {
   invoiceLimit: "Invoice Limit",
   storageLimit: "Storage Limit",
   taxRate: "Tax Rate",
+  categoryId: "Service Category",
+  gender: "Gender",
   roleTitle: "Role Title",
   ownerName: "Owner Name",
   ownerEmail: "Owner Email",
@@ -112,12 +114,36 @@ export const validate = (schema) => (req, res, next) => {
       issues
     });
   }
+  if (parsed.data.body) req.body = parsed.data.body;
+  if (parsed.data.params) req.params = parsed.data.params;
+  if (parsed.data.query) req.query = parsed.data.query;
   next();
 };
 
 const permissionMap = z.record(z.array(z.string()));
 const idSchema = z.string().min(8);
 const optionalString = z.string().optional();
+const normalizeIndianPhone = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("0091")) digits = digits.slice(2);
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  return `+91${digits}`;
+};
+const indianPhoneSchema = z.string().trim()
+  .transform(normalizeIndianPhone)
+  .refine((value) => /^\+91[6-9]\d{9}$/.test(value), "Enter a valid Indian +91 mobile number");
+const optionalIndianPhoneSchema = z.union([z.literal(""), indianPhoneSchema]).optional()
+  .transform((value) => value || undefined);
+const emailOrIndianPhoneSchema = z.string().trim().transform((value) => (
+  value.includes("@") ? value : normalizeIndianPhone(value)
+)).refine((value) => (
+  value.includes("@")
+    ? /^[^\s@]+@(?:[^\s@]+\.[^\s@]+|local)$/i.test(value)
+    : /^\+91[6-9]\d{9}$/.test(value)
+), "Enter a valid email address or Indian +91 mobile number");
 const isValidDateString = (value) => !Number.isNaN(Date.parse(String(value)));
 const requiredDateString = z.string().trim().min(1).pipe(z.string().refine(isValidDateString, "Invalid date"));
 const optionalDateString = z.union([z.literal(""), z.string().trim().refine(isValidDateString, "Invalid date")]).optional();
@@ -182,7 +208,7 @@ export const schemas = {
       businessType: optionalString,
       logoUrl: optionalString,
       email: optionalEmailLike,
-      phone: optionalString,
+      phone: optionalIndianPhoneSchema,
       address: optionalString,
       city: optionalString,
       country: optionalString,
@@ -237,7 +263,7 @@ export const schemas = {
   branch: z.object({
     body: z.object({
       name: z.string().min(2),
-      phone: optionalString,
+      phone: optionalIndianPhoneSchema,
       email: optionalEmailLike,
       address: optionalString,
       businessHours: optionalString,
@@ -250,7 +276,9 @@ export const schemas = {
       price: z.number().nonnegative(),
       durationMin: z.number().int().positive(),
       branchId: z.string().optional(),
+      categoryId: z.string().nullable().optional(),
       description: optionalString,
+      gender: z.enum(["MALE", "FEMALE", "UNISEX"]).optional(),
       taxRate: z.number().min(0).optional(),
       onlineBookingEnabled: z.boolean().optional(),
       commissionPct: z.number().min(0).optional(),
@@ -261,7 +289,7 @@ export const schemas = {
   customer: z.object({
     body: z.object({
       name: z.string().min(2),
-      phone: z.string().min(5),
+      phone: indianPhoneSchema,
       email: optionalEmailLike,
       gender: optionalString,
       dateOfBirth: optionalDateString,
@@ -284,13 +312,22 @@ export const schemas = {
       salonRole: z.enum(["SALON_OWNER", "MANAGER", "RECEPTIONIST", "STAFF", "INVENTORY_MANAGER", "ACCOUNTANT"]),
       branchId: z.string().optional(),
       customRoleId: z.string().optional(),
-      phone: optionalString,
+      phone: optionalIndianPhoneSchema,
       profileNote: optionalString,
       avatarUrl: optionalString,
       roleTitle: optionalString,
       showInCatalog: z.boolean().optional(),
       serviceIds: z.array(z.string()).optional(),
-      permissions: permissionMap.optional()
+      permissions: permissionMap.optional(),
+      joiningDate: optionalDateString,
+      designation: optionalString,
+      uanNumber: optionalString,
+      reportingToId: z.string().optional(),
+      workingHours: optionalString,
+      bankName: optionalString,
+      bankBranch: optionalString,
+      accountNumber: optionalString,
+      ifscCode: optionalString
     })
   }),
   userMembershipUpdate: z.object({
@@ -298,14 +335,23 @@ export const schemas = {
       salonRole: z.enum(["SALON_OWNER", "MANAGER", "RECEPTIONIST", "STAFF", "INVENTORY_MANAGER", "ACCOUNTANT"]).optional(),
       branchId: z.string().nullable().optional(),
       customRoleId: z.string().nullable().optional(),
-      phone: optionalString,
+      phone: optionalIndianPhoneSchema,
       profileNote: optionalString,
       avatarUrl: optionalString,
       roleTitle: optionalString,
       showInCatalog: z.boolean().optional(),
       isArchived: z.boolean().optional(),
       serviceIds: z.array(z.string()).optional(),
-      permissions: permissionMap.optional()
+      permissions: permissionMap.optional(),
+      joiningDate: optionalDateString,
+      designation: optionalString,
+      uanNumber: optionalString,
+      reportingToId: z.string().nullable().optional(),
+      workingHours: optionalString,
+      bankName: optionalString,
+      bankBranch: optionalString,
+      accountNumber: optionalString,
+      ifscCode: optionalString
     })
   }),
   invoice: z.object({
@@ -362,7 +408,7 @@ export const schemas = {
     body: z.object({
       name: z.string().min(2),
       email: emailLikeSchema,
-      phone: z.string().min(5),
+      phone: indianPhoneSchema,
       company: z.string().min(2).optional(),
       message: z.string().optional()
     })
@@ -379,7 +425,7 @@ export const schemas = {
   demoLeadReject: z.object({ body: z.object({ reviewNote: z.string().min(2) }) }),
   supportTicket: z.object({ body: z.object({ title: z.string().min(2), category: z.string().optional(), priority: z.string().optional(), description: z.string().optional(), attachmentUrl: z.string().optional() }) }),
   supportTicketMessage: z.object({ body: z.object({ message: z.string().min(2), attachmentUrl: z.string().optional() }) }),
-  salonSettings: z.object({ body: z.object({ invoicePrefix: z.string().optional(), invoiceFooter: z.string().optional(), taxLabel: z.string().optional(), paymentModes: z.any().optional(), whatsappNumber: z.string().optional(), bookingNotes: z.string().optional(), cancellationPolicy: z.string().optional(), branchId: z.string().nullable().optional(), paymentGatewaySettings: z.any().optional(), allowNegativeStock: z.boolean().optional() }) }),
+  salonSettings: z.object({ body: z.object({ invoicePrefix: z.string().optional(), invoiceFooter: z.string().optional(), taxLabel: z.string().optional(), paymentModes: z.any().optional(), whatsappNumber: optionalIndianPhoneSchema, bookingNotes: z.string().optional(), cancellationPolicy: z.string().optional(), branchId: z.string().nullable().optional(), paymentGatewaySettings: z.any().optional(), advancedSettings: z.any().optional(), smsSettings: z.any().optional(), allowNegativeStock: z.boolean().optional() }) }),
   customRole: z.object({ body: z.object({ name: z.string().min(2), description: z.string().optional(), permissions: permissionMap }) }),
 
   appointment: z.object({
@@ -486,7 +532,7 @@ export const schemas = {
     body: z.object({
       branchId: z.string().nullable().optional(),
       name: z.string().min(2),
-      phone: optionalString,
+      phone: optionalIndianPhoneSchema,
       email: optionalEmailLike,
       address: optionalString,
       notes: optionalString
@@ -538,6 +584,11 @@ export const schemas = {
   membershipPlan: z.object({
     body: z.object({
       name: z.string().min(2),
+      description: optionalString,
+      benefits: z.array(z.object({
+        label: z.string().min(1),
+        value: optionalString
+      })).optional(),
       price: z.number().min(0),
       validityDays: z.number().int().positive(),
       benefitType: z.enum(["DISCOUNT_PERCENT", "DISCOUNT_AMOUNT", "WALLET_VALUE"]),
@@ -680,7 +731,7 @@ export const schemas = {
   publicBooking: z.object({
     body: z.object({
       customerName: z.string().min(2),
-      customerPhone: z.string().min(5),
+      customerPhone: indianPhoneSchema,
       customerEmail: optionalEmailLike,
       branchId: idSchema,
       primaryStaffUserId: z.string().optional(),
@@ -700,7 +751,7 @@ export const schemas = {
       pickupEnabled: z.boolean().optional(),
       deliveryEnabled: z.boolean().optional(),
       deliveryNote: optionalString,
-      supportPhone: optionalString,
+      supportPhone: optionalIndianPhoneSchema,
       termsText: optionalString
     })
   }),
@@ -719,7 +770,7 @@ export const schemas = {
       customerId: z.string().optional(),
       branchId: z.string().nullable().optional(),
       customerName: z.string().min(2),
-      customerPhone: z.string().min(5),
+      customerPhone: indianPhoneSchema,
       customerEmail: optionalEmailLike,
       note: optionalString,
       paymentMode: z.enum(["COD", "PAY_AT_SALON", "ONLINE_PLACEHOLDER"]).default("PAY_AT_SALON"),
@@ -740,7 +791,7 @@ export const schemas = {
     body: z.object({
       salonSlug: z.string().min(2),
       name: z.string().min(2),
-      phone: z.string().min(5),
+      phone: indianPhoneSchema,
       email: optionalEmailLike,
       password: z.string().min(6)
     })
@@ -748,14 +799,14 @@ export const schemas = {
   customerLogin: z.object({
     body: z.object({
       salonSlug: z.string().min(2),
-      emailOrPhone: z.string().min(3),
+      emailOrPhone: emailOrIndianPhoneSchema,
       password: z.string().min(6)
     })
   }),
   customerProfile: z.object({
     body: z.object({
       name: z.string().min(2),
-      phone: z.string().min(5),
+      phone: indianPhoneSchema,
       email: optionalEmailLike,
       preferences: optionalString,
       allergies: optionalString,
@@ -785,7 +836,7 @@ export const schemas = {
     body: z.object({
       name: z.string().min(2),
       type: z.enum(["WHATSAPP", "SMS", "EMAIL", "SOCIAL_BANNER", "CATALOG_BANNER"]),
-      audienceFilter: z.enum(["ALL_CUSTOMERS", "BIRTHDAY_CUSTOMERS", "ANNIVERSARY_CUSTOMERS", "LOST_CUSTOMERS", "HIGH_SPENDERS", "MEMBERSHIP_CUSTOMERS", "PACKAGE_CUSTOMERS", "SERVICE_BASED_CUSTOMERS"]),
+      audienceFilter: z.enum(["ALL_CUSTOMERS", "BIRTHDAY_CUSTOMERS", "ANNIVERSARY_CUSTOMERS", "LOST_CUSTOMERS", "HIGH_SPENDERS", "MEMBERSHIP_CUSTOMERS", "PACKAGE_CUSTOMERS", "SERVICE_BASED_CUSTOMERS", "CRM_SEGMENT"]),
       audienceMeta: z.any().optional(),
       message: optionalString,
       bannerUrl: optionalString,
@@ -911,7 +962,7 @@ export const schemas = {
   enquiry: z.object({
     body: z.object({
       name: z.string().min(2),
-      phone: z.string().min(5),
+      phone: indianPhoneSchema,
       email: optionalEmailLike,
       source: z.enum(["WEBSITE", "WHATSAPP", "PHONE", "WALK_IN", "INSTAGRAM", "FACEBOOK", "ADS", "REFERRAL"]),
       interestedServiceId: z.string().nullable().optional(),
@@ -1043,7 +1094,7 @@ export const schemas = {
     body: z.object({
       customerId: z.string().nullable().optional(),
       campaignId: z.string().nullable().optional(),
-      phone: z.string().min(5),
+      phone: indianPhoneSchema,
       templateType: optionalString,
       message: z.string().min(2),
       mediaKind: optionalString,

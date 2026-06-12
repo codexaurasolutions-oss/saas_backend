@@ -5,6 +5,10 @@ import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewa
 import { schemas, validate } from "../../../middlewares/validate.js";
 
 const toDate = (value) => (value ? new Date(value) : null);
+const normalizePaymentModeQuery = (value) => {
+  const normalized = String(value || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return ["CASH", "CARD", "UPI", "BANK_TRANSFER", "WALLET", "ONLINE"].includes(normalized) ? normalized : null;
+};
 
 export const registerOperationsRoutes = (ownerRouter) => {
   ownerRouter.get("/expense-categories", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
@@ -18,6 +22,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
     const q = String(req.query.q || "").trim();
     const status = String(req.query.status || "").trim();
     const branchId = req.query.branchId ? String(req.query.branchId) : null;
+    const paymentMode = normalizePaymentModeQuery(q);
     res.json(await prisma.expense.findMany({
       where: {
         salonId: req.salonId,
@@ -25,9 +30,9 @@ export const registerOperationsRoutes = (ownerRouter) => {
         ...(branchId ? { branchId } : {}),
         ...(q ? {
           OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { notes: { contains: q, mode: "insensitive" } },
-            { paymentMode: { contains: q, mode: "insensitive" } }
+            { title: { contains: q } },
+            { notes: { contains: q } },
+            ...(paymentMode ? [{ paymentMode }] : [])
           ]
         } : {})
       },
@@ -54,6 +59,14 @@ export const registerOperationsRoutes = (ownerRouter) => {
       }
     });
     res.status(201).json(row);
+  });
+  ownerRouter.get("/expenses/reports", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
+    const rows = await prisma.expense.findMany({ where: { salonId: req.salonId }, include: { category: true, branch: true }, orderBy: { expenseDate: "desc" } });
+    res.json({
+      total: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+      approved: rows.filter((row) => row.status === "APPROVED" || row.status === "PAID"),
+      rows
+    });
   });
   ownerRouter.get("/expenses/:id", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
     const row = await prisma.expense.findFirst({ where: { id: req.params.id, salonId: req.salonId }, include: { branch: true, category: true, vendor: true } });
@@ -95,15 +108,6 @@ export const registerOperationsRoutes = (ownerRouter) => {
     if (!row) return res.status(404).json({ message: "Expense not found" });
     res.json(await prisma.expense.update({ where: { id: row.id }, data: { status: "REJECTED", approvalNote: req.body.approvalNote || null, approvedByMembershipId: req.user.membershipId || null } }));
   });
-  ownerRouter.get("/expenses/reports", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
-    const rows = await prisma.expense.findMany({ where: { salonId: req.salonId }, include: { category: true, branch: true }, orderBy: { expenseDate: "desc" } });
-    res.json({
-      total: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
-      approved: rows.filter((row) => row.status === "APPROVED" || row.status === "PAID"),
-      rows
-    });
-  });
-
   ownerRouter.get("/attendance", requireFeatureEnabled("attendance"), requireSalonPermission("attendance", "view"), async (req, res) => {
     const q = String(req.query.q || "").trim();
     const branchId = req.query.branchId ? String(req.query.branchId) : null;
@@ -111,7 +115,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
       where: {
         salonId: req.salonId,
         ...(branchId ? { branchId } : {}),
-        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q, mode: "insensitive" } } } } } } : {})
+        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q } } } } } } : {})
       },
       include: { userSalon: { include: { user: true } }, branch: true },
       orderBy: { checkInAt: "desc" }
@@ -161,7 +165,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
       where: {
         salonId: req.salonId,
         ...(status ? { status } : {}),
-        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q, mode: "insensitive" } } } } } } : {})
+        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q } } } } } } : {})
       },
       include: { userSalon: { include: { user: true } }, approvedByMembership: { include: { user: true } } },
       orderBy: { createdAt: "desc" }
@@ -203,9 +207,9 @@ export const registerOperationsRoutes = (ownerRouter) => {
         salonId: req.salonId,
         ...(q ? {
           OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { targetType: { contains: q, mode: "insensitive" } },
-            { notes: { contains: q, mode: "insensitive" } }
+            { name: { contains: q } },
+            { targetType: { contains: q } },
+            { notes: { contains: q } }
           ]
         } : {})
       },
@@ -327,10 +331,10 @@ export const registerOperationsRoutes = (ownerRouter) => {
           { OR: [{ userSalonId: null }, { userSalonId: req.user.membershipId || "" }] },
           ...(q ? [{
             OR: [
-              { title: { contains: q, mode: "insensitive" } },
-              { message: { contains: q, mode: "insensitive" } },
-              { type: { contains: q, mode: "insensitive" } },
-              { linkUrl: { contains: q, mode: "insensitive" } }
+              { title: { contains: q } },
+              { message: { contains: q } },
+              { type: { contains: q } },
+              { linkUrl: { contains: q } }
             ]
           }] : [])
         ],
@@ -351,10 +355,10 @@ export const registerOperationsRoutes = (ownerRouter) => {
           { OR: [{ userSalonId: null }, { userSalonId: req.user.membershipId || "" }] },
           ...(q ? [{
             OR: [
-              { title: { contains: q, mode: "insensitive" } },
-              { message: { contains: q, mode: "insensitive" } },
-              { type: { contains: q, mode: "insensitive" } },
-              { linkUrl: { contains: q, mode: "insensitive" } }
+              { title: { contains: q } },
+              { message: { contains: q } },
+              { type: { contains: q } },
+              { linkUrl: { contains: q } }
             ]
           }] : [])
         ],
@@ -400,12 +404,12 @@ export const registerOperationsRoutes = (ownerRouter) => {
         ...(req.query.action ? { action: String(req.query.action) } : {}),
         ...(q ? {
           OR: [
-            { module: { contains: q, mode: "insensitive" } },
-            { action: { contains: q, mode: "insensitive" } },
-            { entityType: { contains: q, mode: "insensitive" } },
-            { entityId: { contains: q, mode: "insensitive" } },
-            { summary: { contains: q, mode: "insensitive" } },
-            { reference: { contains: q, mode: "insensitive" } }
+            { module: { contains: q } },
+            { action: { contains: q } },
+            { entityType: { contains: q } },
+            { entityId: { contains: q } },
+            { summary: { contains: q } },
+            { reference: { contains: q } }
           ]
         } : {})
       },
@@ -421,12 +425,12 @@ export const registerOperationsRoutes = (ownerRouter) => {
         ...(req.query.action ? { action: String(req.query.action) } : {}),
         ...(q ? {
           OR: [
-            { module: { contains: q, mode: "insensitive" } },
-            { action: { contains: q, mode: "insensitive" } },
-            { entityType: { contains: q, mode: "insensitive" } },
-            { entityId: { contains: q, mode: "insensitive" } },
-            { summary: { contains: q, mode: "insensitive" } },
-            { reference: { contains: q, mode: "insensitive" } }
+            { module: { contains: q } },
+            { action: { contains: q } },
+            { entityType: { contains: q } },
+            { entityId: { contains: q } },
+            { summary: { contains: q } },
+            { reference: { contains: q } }
           ]
         } : {})
       },
@@ -441,3 +445,4 @@ export const registerOperationsRoutes = (ownerRouter) => {
     res.send(csv);
   });
 };
+

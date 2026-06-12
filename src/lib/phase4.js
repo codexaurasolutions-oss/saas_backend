@@ -1,6 +1,15 @@
 import { prisma } from "./prisma.js";
 
 const toNumber = (value) => Number(value || 0);
+const asObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
+
+const getNotificationSettings = async (salonId) => {
+  const row = await prisma.salonSetting.findFirst({
+    where: { salonId, branchId: null },
+    select: { advancedSettings: true }
+  });
+  return asObject(asObject(row?.advancedSettings).notificationSettings);
+};
 
 export const createAuditLog = async ({
   salonId = null,
@@ -36,17 +45,32 @@ export const createStaffNotification = async ({
   type = null,
   linkUrl = null,
   metadata = null
-}) => prisma.notification.create({
-  data: {
-    salonId,
-    userSalonId,
-    title,
-    message,
-    type,
-    linkUrl,
-    metadata
-  }
-});
+}) => {
+  const settings = await getNotificationSettings(salonId);
+  const channelsEnabled = [settings.emailEnabled, settings.smsEnabled, settings.whatsappEnabled, settings.pushEnabled]
+    .some((value) => value !== false);
+  if (!channelsEnabled) return null;
+
+  return prisma.notification.create({
+    data: {
+      salonId,
+      userSalonId,
+      title,
+      message,
+      type,
+      linkUrl,
+      metadata: {
+        ...(asObject(metadata)),
+        notificationChannels: {
+          emailEnabled: settings.emailEnabled !== false,
+          smsEnabled: settings.smsEnabled !== false,
+          whatsappEnabled: settings.whatsappEnabled !== false,
+          pushEnabled: settings.pushEnabled === true
+        }
+      }
+    }
+  });
+};
 
 export const createCustomerNotification = async ({
   salonId,
@@ -54,15 +78,22 @@ export const createCustomerNotification = async ({
   title,
   message,
   linkUrl = null
-}) => prisma.customerNotification.create({
-  data: {
-    salonId,
-    customerId,
-    title,
-    message,
-    linkUrl
-  }
-});
+}) => {
+  const settings = await getNotificationSettings(salonId);
+  const channelsEnabled = [settings.emailEnabled, settings.smsEnabled, settings.whatsappEnabled, settings.pushEnabled]
+    .some((value) => value !== false);
+  if (!channelsEnabled) return null;
+
+  return prisma.customerNotification.create({
+    data: {
+      salonId,
+      customerId,
+      title,
+      message,
+      linkUrl
+    }
+  });
+};
 
 export const getActiveLoyaltyRule = async (salonId, branchId = null) => {
   const exact = branchId

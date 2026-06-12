@@ -38,11 +38,11 @@ export const buildInviteEmail = ({ ownerName, salonName, trialEndsAt, inviteLink
     day: "numeric"
   });
 
-  const subject = `Your ReSpark demo is ready for ${salonName}`;
+  const subject = `Your Skillify demo is ready for ${salonName}`;
   const text = [
     `Hi ${ownerName},`,
     "",
-    `Your 7-day ReSpark trial for ${salonName} is now ready.`,
+    `Your 7-day Skillify trial for ${salonName} is now ready.`,
     `Trial ends: ${trialEndLabel}`,
     "",
     "Use this secure link to set your password:",
@@ -52,13 +52,13 @@ export const buildInviteEmail = ({ ownerName, salonName, trialEndsAt, inviteLink
     loginLink,
     "",
     "Regards,",
-    "ReSpark Team"
+    "Skillify Team"
   ].join("\n");
 
   const html = `
     <div style="font-family:Arial,sans-serif;background:#f7f4ef;padding:32px;color:#18212c;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#8a4b08;margin:0 0 12px;">ReSpark Demo Access</p>
+        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#8a4b08;margin:0 0 12px;">Skillify Demo Access</p>
         <h1 style="margin:0 0 14px;font-size:32px;line-height:1.15;">Your ${salonName} trial is ready.</h1>
         <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${ownerName}, your 7-day trial environment has been created. Set your password using the secure link below and then access your panel with your account email.</p>
         <div style="background:#fff7ed;border-radius:18px;padding:18px 20px;margin:0 0 20px;">

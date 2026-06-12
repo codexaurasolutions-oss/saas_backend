@@ -1,9 +1,71 @@
 import { prisma } from "../../../lib/prisma.js";
 import { createAuditLog, redeemGiftCardAmount, validateCouponForContext } from "../../../lib/phase4.js";
+import { ensureProgramEnabled, getProgramSettings, toRuleNumber } from "../../../lib/settingsRules.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
 
 const toDate = (value) => (value ? new Date(value) : null);
+const addDays = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() + Number(days || 0));
+  return date;
+};
+
+const buildCouponData = (body, couponSettings) => {
+  const discountType = body.discountType;
+  const discountValue = toRuleNumber(body.discountValue);
+  const maxPercent = toRuleNumber(couponSettings.maxDiscountPercent, 0);
+  if (discountType === "PERCENT" && maxPercent > 0 && discountValue > maxPercent) {
+    const error = new Error(`Coupon discount cannot exceed ${maxPercent}% as configured in settings`);
+    error.status = 400;
+    throw error;
+  }
+  const settingsMinBill = toRuleNumber(couponSettings.minimumBillAmount, 0);
+  const minBillAmount = Math.max(toRuleNumber(body.minBillAmount, 0), settingsMinBill);
+  return {
+    branchId: body.branchId || null,
+    serviceId: body.serviceId || null,
+    productId: body.productId || null,
+    code: body.code,
+    title: body.title,
+    description: body.description || null,
+    discountType,
+    discountValue,
+    minBillAmount,
+    usageLimit: body.usageLimit ?? null,
+    customerUsageLimit: body.customerUsageLimit ?? null,
+    startsAt: toDate(body.startsAt),
+    endsAt: toDate(body.endsAt),
+    isReferral: body.isReferral ?? false,
+    isInfluencer: body.isInfluencer ?? false,
+    isBirthday: body.isBirthday ?? false,
+    isFestival: body.isFestival ?? false,
+    isArchived: body.isArchived ?? false,
+    notes: body.notes || null
+  };
+};
+
+const buildGiftCardData = (body, giftCardSettings) => {
+  const originalAmount = toRuleNumber(body.originalAmount);
+  const minimumAmount = toRuleNumber(giftCardSettings.minimumAmount, 0);
+  const maximumAmount = toRuleNumber(giftCardSettings.maximumAmount, 0);
+  if (minimumAmount > 0 && originalAmount < minimumAmount) {
+    const error = new Error(`Gift card amount must be at least ${minimumAmount}`);
+    error.status = 400;
+    throw error;
+  }
+  if (maximumAmount > 0 && originalAmount > maximumAmount) {
+    const error = new Error(`Gift card amount cannot exceed ${maximumAmount}`);
+    error.status = 400;
+    throw error;
+  }
+  const validityDays = toRuleNumber(giftCardSettings.validityDays, 0);
+  return {
+    originalAmount,
+    balanceAmount: body.balanceAmount ?? originalAmount,
+    expiresAt: toDate(body.expiresAt) || (validityDays > 0 ? addDays(validityDays) : null)
+  };
+};
 
 export const registerPromotionRoutes = (ownerRouter) => {
   ownerRouter.get("/coupons", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "view"), async (req, res) => {
@@ -11,28 +73,12 @@ export const registerPromotionRoutes = (ownerRouter) => {
   });
 
   ownerRouter.post("/coupons", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "create"), validate(schemas.coupon), async (req, res) => {
+    const couponSettings = await getProgramSettings(req.salonId, "couponSettings", { enabled: true, maxDiscountPercent: 0, minimumBillAmount: 0 });
+    ensureProgramEnabled(couponSettings, "Coupons");
     const row = await prisma.coupon.create({
       data: {
         salonId: req.salonId,
-        branchId: req.body.branchId || null,
-        serviceId: req.body.serviceId || null,
-        productId: req.body.productId || null,
-        code: req.body.code,
-        title: req.body.title,
-        description: req.body.description || null,
-        discountType: req.body.discountType,
-        discountValue: req.body.discountValue,
-        minBillAmount: req.body.minBillAmount ?? null,
-        usageLimit: req.body.usageLimit ?? null,
-        customerUsageLimit: req.body.customerUsageLimit ?? null,
-        startsAt: toDate(req.body.startsAt),
-        endsAt: toDate(req.body.endsAt),
-        isReferral: req.body.isReferral ?? false,
-        isInfluencer: req.body.isInfluencer ?? false,
-        isBirthday: req.body.isBirthday ?? false,
-        isFestival: req.body.isFestival ?? false,
-        isArchived: req.body.isArchived ?? false,
-        notes: req.body.notes || null
+        ...buildCouponData(req.body, couponSettings)
       }
     });
     await createAuditLog({
@@ -50,31 +96,13 @@ export const registerPromotionRoutes = (ownerRouter) => {
   });
 
   ownerRouter.patch("/coupons/:id", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "edit"), validate(schemas.coupon), async (req, res) => {
+    const couponSettings = await getProgramSettings(req.salonId, "couponSettings", { enabled: true, maxDiscountPercent: 0, minimumBillAmount: 0 });
+    ensureProgramEnabled(couponSettings, "Coupons");
     const row = await prisma.coupon.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
     if (!row) return res.status(404).json({ message: "Coupon not found" });
     const updated = await prisma.coupon.update({
       where: { id: row.id },
-      data: {
-        branchId: req.body.branchId || null,
-        serviceId: req.body.serviceId || null,
-        productId: req.body.productId || null,
-        code: req.body.code,
-        title: req.body.title,
-        description: req.body.description || null,
-        discountType: req.body.discountType,
-        discountValue: req.body.discountValue,
-        minBillAmount: req.body.minBillAmount ?? null,
-        usageLimit: req.body.usageLimit ?? null,
-        customerUsageLimit: req.body.customerUsageLimit ?? null,
-        startsAt: toDate(req.body.startsAt),
-        endsAt: toDate(req.body.endsAt),
-        isReferral: req.body.isReferral ?? false,
-        isInfluencer: req.body.isInfluencer ?? false,
-        isBirthday: req.body.isBirthday ?? false,
-        isFestival: req.body.isFestival ?? false,
-        isArchived: req.body.isArchived ?? false,
-        notes: req.body.notes || null
-      }
+      data: buildCouponData(req.body, couponSettings)
     });
     await createAuditLog({
       salonId: req.salonId,
@@ -91,6 +119,8 @@ export const registerPromotionRoutes = (ownerRouter) => {
   });
 
   ownerRouter.post("/coupons/validate", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "view"), validate(schemas.couponValidate), async (req, res) => {
+    const couponSettings = await getProgramSettings(req.salonId, "couponSettings", { enabled: true });
+    ensureProgramEnabled(couponSettings, "Coupons");
     const result = await validateCouponForContext({
       salonId: req.salonId,
       code: req.body.code,
@@ -124,6 +154,9 @@ export const registerPromotionRoutes = (ownerRouter) => {
   });
 
   ownerRouter.post("/gift-cards", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "create"), validate(schemas.giftCard), async (req, res) => {
+    const giftCardSettings = await getProgramSettings(req.salonId, "giftCardSettings", { enabled: true, validityDays: 365, minimumAmount: 0, maximumAmount: 0 });
+    ensureProgramEnabled(giftCardSettings, "Gift cards");
+    const giftCardData = buildGiftCardData(req.body, giftCardSettings);
     const row = await prisma.giftCard.create({
       data: {
         salonId: req.salonId,
@@ -133,9 +166,9 @@ export const registerPromotionRoutes = (ownerRouter) => {
         createdByMembershipId: req.user.membershipId || null,
         code: req.body.code,
         title: req.body.title,
-        originalAmount: req.body.originalAmount,
-        balanceAmount: req.body.balanceAmount ?? req.body.originalAmount,
-        expiresAt: toDate(req.body.expiresAt),
+        originalAmount: giftCardData.originalAmount,
+        balanceAmount: giftCardData.balanceAmount,
+        expiresAt: giftCardData.expiresAt,
         isActive: req.body.isActive ?? true,
         note: req.body.note || null
       }
@@ -164,6 +197,8 @@ export const registerPromotionRoutes = (ownerRouter) => {
   });
 
   ownerRouter.post("/gift-cards/redeem", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "edit"), validate(schemas.giftCardRedeem), async (req, res) => {
+    const giftCardSettings = await getProgramSettings(req.salonId, "giftCardSettings", { enabled: true });
+    ensureProgramEnabled(giftCardSettings, "Gift cards");
     const giftCardId = req.body.giftCardId || req.body.id;
     if (!giftCardId) return res.status(400).json({ message: "giftCardId: Gift card is required" });
     const result = await redeemGiftCardAmount({

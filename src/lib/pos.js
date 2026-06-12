@@ -114,6 +114,11 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
   await ensureScopedBranch(salonId, body.branchId);
   const membership = await ensureActiveCustomerMembership(salonId, body.customerId, body.appliedMembershipId);
 
+  const salonSettings = await prisma.salonSetting.findFirst({ where: { salonId, branchId: null } });
+  const advancedSettings = typeof salonSettings?.advancedSettings === "object" ? salonSettings.advancedSettings : {};
+  const allowPriceEdit = advancedSettings?.allowPriceEditOnBill !== false;
+  const membershipSettings = typeof advancedSettings?.membershipSettings === "object" ? advancedSettings.membershipSettings : {};
+
   const itemDrafts = [];
   for (const item of body.items) {
     const itemType = item.itemType || (item.productId ? "PRODUCT" : item.membershipPlanId ? "MEMBERSHIP" : item.packageId ? "PACKAGE" : "SERVICE");
@@ -130,6 +135,11 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
       }
 
       let unitPrice = item.unitPrice != null ? toAmount(item.unitPrice) : toAmount(service.price);
+      if (!allowPriceEdit && unitPrice !== toAmount(service.price)) {
+        const error = new Error("Price edits on the bill are restricted by salon settings");
+        error.status = 400;
+        throw error;
+      }
       let appliedBenefitType = null;
       let appliedBenefitValue = 0;
       let membershipWalletUsed = 0;
@@ -183,6 +193,11 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
       const product = await ensureProduct(salonId, body.branchId, item.productId);
       const qty = Number(item.qty || 1);
       const unitPrice = item.unitPrice != null ? toAmount(item.unitPrice) : toAmount(product.sellingPrice);
+      if (!allowPriceEdit && unitPrice !== toAmount(product.sellingPrice)) {
+        const error = new Error("Price edits on the bill are restricted by salon settings");
+        error.status = 400;
+        throw error;
+      }
       const taxPct = toAmount(item.taxPct || 0);
       const preTax = unitPrice * qty;
       itemDrafts.push({
@@ -202,16 +217,19 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
 
     if (itemType === "MEMBERSHIP") {
       const plan = await ensureMembershipPlan(salonId, item.membershipPlanId);
+      const qty = 1;
+      const taxPct = toAmount(item.taxPct || 0);
+      const preTax = toAmount(plan.price) * qty;
       itemDrafts.push({
         itemType,
         membershipPlanId: plan.id,
         staffUserSalonId: item.staffUserId || null,
         serviceName: plan.name,
         staffName: item.staffName || null,
-        qty: 1,
+        qty,
         unitPrice: toAmount(plan.price),
-        taxPct: toAmount(item.taxPct || 0),
-        lineTotal: toAmount(plan.price),
+        taxPct,
+        lineTotal: preTax + (preTax * taxPct) / 100,
         commissionAmount: 0
       });
       continue;
@@ -219,18 +237,44 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
 
     if (itemType === "PACKAGE") {
       const pack = await ensurePackagePlan(salonId, item.packageId);
+      const qty = 1;
+      const taxPct = toAmount(item.taxPct || 0);
+      const preTax = toAmount(pack.price) * qty;
       itemDrafts.push({
         itemType,
         packageId: pack.id,
         staffUserSalonId: item.staffUserId || null,
         serviceName: pack.name,
         staffName: item.staffName || null,
-        qty: 1,
+        qty,
         unitPrice: toAmount(pack.price),
-        taxPct: toAmount(item.taxPct || 0),
-        lineTotal: toAmount(pack.price),
+        taxPct,
+        lineTotal: preTax + (preTax * taxPct) / 100,
         commissionAmount: 0
       });
+    }
+  }
+
+  const soldMembershipCount = itemDrafts.filter((item) => item.itemType === "MEMBERSHIP").length;
+  if (soldMembershipCount > 0 && membershipSettings.allowMultipleActivePlans === false) {
+    if (soldMembershipCount > 1) {
+      const error = new Error("Only one membership can be sold in a single invoice when multiple active plans are disabled");
+      error.status = 400;
+      throw error;
+    }
+    const existingActiveMembership = await prisma.customerMembership.findFirst({
+      where: {
+        salonId,
+        customerId: body.customerId,
+        status: "ACTIVE",
+        endsAt: { gte: new Date() }
+      },
+      include: { membershipPlan: true }
+    });
+    if (existingActiveMembership) {
+      const error = new Error(`Customer already has an active membership: ${existingActiveMembership.membershipPlan?.name || "membership"}`);
+      error.status = 400;
+      throw error;
     }
   }
 

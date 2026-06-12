@@ -56,7 +56,7 @@ const withTimeout = async (promise, timeoutMs) => {
 export const sendMail = async (options) => {
   const mail = await withTimeout(
     getMailer().sendMail({
-      from: process.env.SMTP_FROM || "ReSpark <no-reply@respark.local>",
+      from: process.env.SMTP_FROM || "Skillify <no-reply@skillify.local>",
       ...options
     }),
     DEFAULT_TIMEOUT_MS

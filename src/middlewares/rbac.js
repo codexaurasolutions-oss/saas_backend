@@ -50,3 +50,11 @@ export const requireCustomerAuth = (req, res, next) => {
   }
   next();
 };
+
+export const attachSalonSettings = async (req, res, next) => {
+  if (!req.salonId) return next();
+  const settings = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
+  req.salonSettings = settings || {};
+  req.advancedSettings = typeof settings?.advancedSettings === "object" && settings.advancedSettings ? settings.advancedSettings : {};
+  next();
+};

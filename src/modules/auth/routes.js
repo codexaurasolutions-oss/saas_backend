@@ -213,9 +213,9 @@ authRouter.post("/forgot-password", validate(schemas.forgotPassword), async (req
 
   await sendMail({
     to: user.email,
-    subject: "Reset your ReSpark password",
+    subject: "Reset your Skillify password",
     text: `Hi ${user.name},\n\nUse this secure link to set a new password:\n${resetLink}\n\nLogin page:\n${loginLink}\n`,
-    html: `<div style="font-family:Arial,sans-serif;padding:24px;background:#f7f4ef;color:#18212c;"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:24px;padding:28px;"><h2>Reset your password</h2><p>Hi ${user.name}, use the secure link below to choose a new password for your ReSpark account.</p><p><a href="${resetLink}" style="display:inline-block;background:#0f766e;color:#fff;padding:14px 18px;border-radius:999px;text-decoration:none;font-weight:700;">Set new password</a></p><p style="font-size:14px;">Login page: <a href="${loginLink}">${loginLink}</a></p></div></div>`
+    html: `<div style="font-family:Arial,sans-serif;padding:24px;background:#f7f4ef;color:#18212c;"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:24px;padding:28px;"><h2>Reset your password</h2><p>Hi ${user.name}, use the secure link below to choose a new password for your Skillify account.</p><p><a href="${resetLink}" style="display:inline-block;background:#0f766e;color:#fff;padding:14px 18px;border-radius:999px;text-decoration:none;font-weight:700;">Set new password</a></p><p style="font-size:14px;">Login page: <a href="${loginLink}">${loginLink}</a></p></div></div>`
   });
 
   return res.json({ message: "If this email exists in the system, a password setup email has been sent." });

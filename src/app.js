@@ -37,6 +37,22 @@ const getAllowedOrigins = (overrideOrigins = null) => {
   ]);
 };
 
+const isLocalRequest = (req) => {
+  const forwardedFor = String(req.headers["x-forwarded-for"] || "");
+  const remoteAddress = String(req.ip || req.socket?.remoteAddress || "");
+  const origin = String(req.headers.origin || "");
+  return [forwardedFor, remoteAddress, origin].some((value) =>
+    value.includes("127.0.0.1") || value.includes("::1") || value.includes("localhost")
+  );
+};
+
+const shouldBypassLocalRateLimit = () => {
+  const env = process.env.NODE_ENV || "development";
+  if (env === "production" || env === "test") return false;
+  if (process.env.VITEST) return false;
+  return true;
+};
+
 export const createApp = ({
   routerOverride = router,
   authMiddlewareOverride = authMiddleware,
@@ -83,7 +99,11 @@ export const createApp = ({
     limit: rateLimitMax,
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => req.path === "/health" || req.path === "/ready",
+    skip: (req) => {
+      if (req.path === "/health" || req.path === "/ready") return true;
+      if (shouldBypassLocalRateLimit() && isLocalRequest(req)) return true;
+      return false;
+    },
     handler: (req, res) => {
       res.status(429).json({
         message: "Too many requests, please try again shortly.",

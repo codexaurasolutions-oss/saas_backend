@@ -1,0 +1,237 @@
+[fe5f5c75-c027-4371-a3cc-cd45233b3000] PrismaClientValidationError: 
+Invalid `prisma.customer.findMany()` invocation:
+
+{
+  where: {
+    salonId: "cmpuzbmy40001q114m55twsxn",
+    OR: [
+      {
+        name: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        phone: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        email: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        source: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      }
+    ],
+    memberships: {
+      some: {
+        status: "ACTIVE",
+        endsAt: {
+          gte: new Date("2026-06-11T02:23:36.607Z")
+        }
+      }
+    }
+  },
+  include: {
+    preferredStaff: {
+      include: {
+        user: true
+      }
+    }
+  },
+  orderBy: {
+    createdAt: "desc"
+  }
+}
+
+Unknown argument `mode`. Did you mean `lte`? Available options are marked with ?.
+    at Nn (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:29:1363)
+    at ei.handleRequestError (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6911)
+    at ei.handleAndLogRequestError (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6593)
+    at ei.request (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6300)
+    at async a (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:130:9551)
+    at async file:///C:/Users/Ahmed%20Bilal%20Khan/Desktop/Respark_Clone/backend/src/modules/owner/routes.js:400:16 {
+  clientVersion: '6.19.3'
+}
+[ace52ac9-e777-4f52-90e2-1714fc1da921] PrismaClientValidationError: 
+Invalid `prisma.customer.findMany()` invocation:
+
+{
+  where: {
+    salonId: "cmpuzbmy40001q114m55twsxn",
+    OR: [
+      {
+        name: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        phone: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        email: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        source: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      }
+    ]
+  },
+  include: {
+    preferredStaff: {
+      include: {
+        user: true
+      }
+    }
+  },
+  orderBy: {
+    createdAt: "desc"
+  }
+}
+
+Unknown argument `mode`. Did you mean `lte`? Available options are marked with ?.
+    at Nn (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:29:1363)
+    at ei.handleRequestError (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6911)
+    at ei.handleAndLogRequestError (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6593)
+    at ei.request (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6300)
+    at async a (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:130:9551)
+    at async file:///C:/Users/Ahmed%20Bilal%20Khan/Desktop/Respark_Clone/backend/src/modules/owner/routes.js:400:16 {
+  clientVersion: '6.19.3'
+}
+[6799d0be-4aff-484f-a519-bbb53f009c19] PrismaClientValidationError: 
+Invalid `prisma.customer.findMany()` invocation:
+
+{
+  where: {
+    salonId: "cmpuzbmy40001q114m55twsxn",
+    OR: [
+      {
+        name: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        phone: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        email: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      },
+      {
+        source: {
+          contains: "salon",
+          mode: "insensitive"
+        }
+      }
+    ],
+    memberships: {
+      some: {
+        status: "ACTIVE",
+        endsAt: {
+          gte: new Date("2026-06-11T02:28:41.849Z")
+        }
+      }
+    }
+  },
+  include: {
+    preferredStaff: {
+      include: {
+        user: true
+      }
+    }
+  },
+  orderBy: {
+    createdAt: "desc"
+  }
+}
+
+Unknown argument `mode`. Did you mean `lte`? Available options are marked with ?.
+    at Nn (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:29:1363)
+    at ei.handleRequestError (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6911)
+    at ei.handleAndLogRequestError (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6593)
+    at ei.request (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:121:6300)
+    at async a (C:\Users\Ahmed Bilal Khan\Desktop\Respark_Clone\backend\node_modules\@prisma\client\runtime\library.js:130:9551)
+    at async file:///C:/Users/Ahmed%20Bilal%20Khan/Desktop/Respark_Clone/backend/src/modules/owner/routes.js:400:16 {
+  clientVersion: '6.19.3'
+}
+[eca897f1-cc73-47bb-8fe0-97a3f5b975d0] ReferenceError: require is not defined
+    at file:///C:/Users/Ahmed%20Bilal%20Khan/Desktop/Respark_Clone/backend/src/modules/owner/routes.js:357:16
+file:///C:/Users/Ahmed%20Bilal%20Khan/Desktop/Respark_Clone/backend/src/modules/owner/phase2/billing.js:367
+    const settings = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: inv.branchId || null } });
+                     ^^^^^
+
+SyntaxError: Unexpected reserved word
+    at compileSourceTextModule (node:internal/modules/esm/utils:318:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:90:18)
+    at #translate (node:internal/modules/esm/loader:451:20)
+    at afterLoad (node:internal/modules/esm/loader:507:29)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:512:12)
+    at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:555:36)
+    at afterResolve (node:internal/modules/esm/loader:603:52)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:609:12)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:162:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:252:17)
+
+Node.js v24.15.0
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 127.0.0.1:5050
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at node:net:2274:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2044:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '127.0.0.1',
+  port: 5050
+}
+
+Node.js v24.15.0
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 127.0.0.1:5050
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at node:net:2274:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2044:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '127.0.0.1',
+  port: 5050
+}
+
+Node.js v24.15.0

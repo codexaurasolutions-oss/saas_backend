@@ -7,11 +7,18 @@ import { schemas, validate } from "../../../middlewares/validate.js";
 const includeCampaign = {
   logs: { orderBy: { createdAt: "desc" } }
 };
+const normalizeCampaignTypeQuery = (value) => {
+  const normalized = String(value || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return ["WHATSAPP", "SMS", "EMAIL", "SOCIAL_BANNER", "CATALOG_BANNER"].includes(normalized) ? normalized : null;
+};
 
 export const registerCampaignRoutes = (ownerRouter) => {
   const getCampaignAudienceMetaError = (body) => {
     if (body.audienceFilter === "SERVICE_BASED_CUSTOMERS" && !body.audienceMeta?.serviceId) {
       return "Service is required for service-based campaigns";
+    }
+    if (body.audienceFilter === "CRM_SEGMENT" && !body.audienceMeta?.segmentId) {
+      return "Saved CRM segment is required for segment-based campaigns";
     }
     return null;
   };
@@ -46,6 +53,7 @@ export const registerCampaignRoutes = (ownerRouter) => {
     const status = String(req.query.status || "").trim();
     const type = String(req.query.type || "").trim();
     const audienceFilter = String(req.query.audienceFilter || "").trim();
+    const campaignType = normalizeCampaignTypeQuery(q);
     res.json(await prisma.campaign.findMany({
       where: {
         salonId: req.salonId,
@@ -54,10 +62,10 @@ export const registerCampaignRoutes = (ownerRouter) => {
         ...(audienceFilter ? { audienceFilter } : {}),
         ...(q ? {
           OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { message: { contains: q, mode: "insensitive" } },
-            { type: { contains: q, mode: "insensitive" } },
-            { audienceFilter: { contains: q, mode: "insensitive" } }
+            { name: { contains: q } },
+            { message: { contains: q } },
+            ...(campaignType ? [{ type: campaignType }] : []),
+            { audienceFilter: { contains: q } }
           ]
         } : {})
       },
@@ -193,7 +201,7 @@ export const registerCampaignRoutes = (ownerRouter) => {
       where: {
         campaignId: row.id,
         ...(eventType ? { eventType } : {}),
-        ...(q ? { details: { contains: q, mode: "insensitive" } } : {})
+        ...(q ? { details: { contains: q } } : {})
       },
       orderBy: { createdAt: "desc" }
     }));
@@ -207,7 +215,7 @@ export const registerCampaignRoutes = (ownerRouter) => {
       where: {
         campaignId: row.id,
         ...(eventType ? { eventType } : {}),
-        ...(q ? { details: { contains: q, mode: "insensitive" } } : {})
+        ...(q ? { details: { contains: q } } : {})
       },
       orderBy: { createdAt: "desc" }
     });
@@ -220,3 +228,4 @@ export const registerCampaignRoutes = (ownerRouter) => {
     res.send(csv);
   });
 };
+

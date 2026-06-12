@@ -131,10 +131,20 @@ export const registerFeedbackRoutes = (ownerRouter) => {
 
   ownerRouter.get("/feedback/settings", requireFeatureEnabled("feedback"), requireSalonPermission("feedback", "view"), async (req, res) => {
     const setting = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
+    const advancedSettings = setting?.advancedSettings && typeof setting.advancedSettings === "object" ? setting.advancedSettings : {};
+    const feedbackSetting = advancedSettings.feedbackSetting && typeof advancedSettings.feedbackSetting === "object" ? advancedSettings.feedbackSetting : {};
+    const notificationSettings = advancedSettings.notificationSettings && typeof advancedSettings.notificationSettings === "object" ? advancedSettings.notificationSettings : {};
     res.json({
       whatsappNumber: setting?.whatsappNumber || "",
       bookingNotes: setting?.bookingNotes || "",
-      cancellationPolicy: setting?.cancellationPolicy || ""
+      cancellationPolicy: setting?.cancellationPolicy || "",
+      enabled: feedbackSetting.enabled !== false,
+      sendSms: feedbackSetting.sendSms !== false,
+      sendWhatsapp: Boolean(feedbackSetting.sendWhatsapp),
+      feedbackDelayHours: Number(feedbackSetting.feedbackDelayHours || 24),
+      ratingPrompt: feedbackSetting.ratingPrompt || "",
+      thankYouMessage: feedbackSetting.thankYouMessage || "",
+      lowRatingAlertEmail: feedbackSetting.lowRatingAlertEmail || notificationSettings.alertEmail || ""
     });
   });
 };

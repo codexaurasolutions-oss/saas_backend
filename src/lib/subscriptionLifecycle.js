@@ -20,13 +20,13 @@ export const buildTrialReminderEmail = ({ ownerName, salonName, endsAt, loginLin
   const text = [
     `Hi ${ownerName},`,
     "",
-    `Your ReSpark trial for ${salonName} expires on ${formatDate(endsAt)}.`,
+    `Your Skillify trial for ${salonName} expires on ${formatDate(endsAt)}.`,
     "",
     `Login here: ${loginLink}`,
     "",
     "If you want to continue without interruption, please upgrade your subscription before the trial ends.",
     "",
-    "ReSpark Team"
+    "Skillify Team"
   ].join("\n");
 
   const html = `
@@ -34,7 +34,7 @@ export const buildTrialReminderEmail = ({ ownerName, salonName, endsAt, loginLin
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
         <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#8a4b08;margin:0 0 12px;">Trial Reminder</p>
         <h1 style="margin:0 0 14px;font-size:30px;line-height:1.15;">Your trial expires in ${daysLeft} day(s).</h1>
-        <p style="font-size:16px;line-height:1.7;margin:0 0 18px;">Hi ${ownerName}, your ReSpark trial for <strong>${salonName}</strong> ends on <strong>${formatDate(endsAt)}</strong>.</p>
+        <p style="font-size:16px;line-height:1.7;margin:0 0 18px;">Hi ${ownerName}, your Skillify trial for <strong>${salonName}</strong> ends on <strong>${formatDate(endsAt)}</strong>.</p>
         <div style="background:#fff7ed;border-radius:18px;padding:18px 20px;margin:0 0 20px;">
           <p style="margin:0;"><strong>Login link:</strong> <a href="${loginLink}" style="color:#0f766e;">Open panel</a></p>
         </div>
@@ -56,7 +56,7 @@ export const buildConversionEmail = ({ ownerName, salonName, planName, endsAt, l
     "",
     `Login here: ${loginLink}`,
     "",
-    "ReSpark Team"
+    "Skillify Team"
   ].join("\n");
 
   const html = `

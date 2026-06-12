@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../../lib/prisma.js";
 import { attachBranchStock, buildCsv, isOwnScopedStaff, normalizeBranchId, toAmount } from "../../lib/phase2.js";
 import { requireAuth, requireFeatureEnabled, requireSalonContext, requireSalonPermission } from "../../middlewares/rbac.js";
+import { registerExtendedReports } from "./routes-extended.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth, requireSalonContext, requireFeatureEnabled("reports"), requireSalonPermission("reports", "view"));
@@ -285,6 +286,8 @@ reportsRouter.get("/cancelled-invoices", async (req, res) => {
     orderBy: { createdAt: "desc" }
   }));
 });
+
+registerExtendedReports(reportsRouter, prisma, buildInvoiceWhere);
 
 reportsRouter.get("/export.csv", async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);

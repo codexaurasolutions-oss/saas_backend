@@ -123,11 +123,11 @@ export const registerCommunicationRoutes = (ownerRouter) => {
         ...(templateType ? { templateType } : {}),
         ...(q ? {
           OR: [
-            { phone: { contains: q, mode: "insensitive" } },
-            { templateType: { contains: q, mode: "insensitive" } },
-            { message: { contains: q, mode: "insensitive" } },
-            { customer: { is: { name: { contains: q, mode: "insensitive" } } } },
-            { campaign: { is: { name: { contains: q, mode: "insensitive" } } } }
+            { phone: { contains: q } },
+            { templateType: { contains: q } },
+            { message: { contains: q } },
+            { customer: { is: { name: { contains: q } } } },
+            { campaign: { is: { name: { contains: q } } } }
           ]
         } : {})
       },
@@ -200,11 +200,11 @@ export const registerCommunicationRoutes = (ownerRouter) => {
         ...(templateType ? { templateType } : {}),
         ...(q ? {
           OR: [
-            { phone: { contains: q, mode: "insensitive" } },
-            { templateType: { contains: q, mode: "insensitive" } },
-            { message: { contains: q, mode: "insensitive" } },
-            { customer: { is: { name: { contains: q, mode: "insensitive" } } } },
-            { campaign: { is: { name: { contains: q, mode: "insensitive" } } } }
+            { phone: { contains: q } },
+            { templateType: { contains: q } },
+            { message: { contains: q } },
+            { customer: { is: { name: { contains: q } } } },
+            { campaign: { is: { name: { contains: q } } } }
           ]
         } : {})
       },
@@ -291,3 +291,4 @@ export const registerCommunicationRoutes = (ownerRouter) => {
     }));
   });
 };
+

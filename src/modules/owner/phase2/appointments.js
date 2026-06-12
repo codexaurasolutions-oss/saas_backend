@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "../../../lib/prisma.js";
 import { checkStaffAvailability, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
-import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
+import { attachSalonSettings, requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
 import { assignAppointmentItems, buildAppointmentScope, canAccessAppointment, fetchAppointment, logAppointmentChange, nextNumber } from "./shared.js";
 
@@ -64,13 +64,20 @@ export const registerAppointmentRoutes = (ownerRouter) => {
     res.json(appointment);
   });
 
-  ownerRouter.post("/appointments", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "create"), validate(schemas.appointment), async (req, res) => {
+  ownerRouter.post("/appointments", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "create"), attachSalonSettings, validate(schemas.appointment), async (req, res) => {
     try {
       const body = req.body;
       await ensureScopedCustomer(req.salonId, body.customerId);
       await ensureScopedBranch(req.salonId, body.branchId);
 
       for (const item of body.items) {
+        if (!req.advancedSettings?.allowBackdatedAppointments) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (new Date(item.startAt) < today) {
+            return res.status(400).json({ message: "Backdated appointments are restricted by salon settings" });
+          }
+        }
         const service = await ensureScopedService(req.salonId, item.serviceId);
         if (service.branchId && service.branchId !== body.branchId) {
           return res.status(400).json({ message: `${service.name} does not belong to the selected branch` });
@@ -130,7 +137,7 @@ export const registerAppointmentRoutes = (ownerRouter) => {
     }
   });
 
-  ownerRouter.patch("/appointments/:id", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "edit"), validate(schemas.appointment), async (req, res) => {
+  ownerRouter.patch("/appointments/:id", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "edit"), attachSalonSettings, validate(schemas.appointment), async (req, res) => {
     try {
       const existing = await fetchAppointment(req.salonId, req.params.id);
       if (!existing) return res.status(404).json({ message: "Appointment not found" });
@@ -140,6 +147,13 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       await ensureScopedBranch(req.salonId, req.body.branchId);
 
       for (const item of req.body.items) {
+        if (!req.advancedSettings?.allowBackdatedAppointments) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (new Date(item.startAt) < today) {
+            return res.status(400).json({ message: "Backdated appointments are restricted by salon settings" });
+          }
+        }
         const service = await ensureScopedService(req.salonId, item.serviceId);
         if (service.branchId && service.branchId !== req.body.branchId) {
           return res.status(400).json({ message: `${service.name} does not belong to the selected branch` });
@@ -217,7 +231,7 @@ export const registerAppointmentRoutes = (ownerRouter) => {
     res.json(await fetchAppointment(req.salonId, appointment.id));
   });
 
-  ownerRouter.post("/appointments/:id/reschedule", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "edit"), validate(schemas.appointmentReschedule), async (req, res) => {
+  ownerRouter.post("/appointments/:id/reschedule", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "edit"), attachSalonSettings, validate(schemas.appointmentReschedule), async (req, res) => {
     try {
       const appointment = await fetchAppointment(req.salonId, req.params.id);
       if (!appointment) return res.status(404).json({ message: "Appointment not found" });
@@ -232,6 +246,13 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       }));
 
       for (const item of items) {
+        if (!req.advancedSettings?.allowBackdatedAppointments) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (new Date(item.startAt) < today) {
+            return res.status(400).json({ message: "Backdated appointments are restricted by salon settings" });
+          }
+        }
         const service = await ensureScopedService(req.salonId, item.serviceId);
         for (const staffUserId of item.staffUserIds) {
           const membership = await ensureScopedStaffMembership(req.salonId, staffUserId);

@@ -7,7 +7,7 @@ export const registerMyPageRoutes = (ownerRouter) => {
     const [profile, scopedAppointments, notifications] = await Promise.all([
       prisma.userSalon.findFirst({
         where: { id: req.user.membershipId, salonId: req.salonId },
-        include: { serviceAssignments: { include: { service: true } } }
+        include: { serviceAssignments: { include: { service: { include: { category: true } } } } }
       }),
       prisma.appointment.findMany({
         where: {
@@ -58,7 +58,7 @@ export const registerMyPageRoutes = (ownerRouter) => {
         salonId: req.salonId,
         items: { some: { assignedStaff: { some: { userSalonId: req.user.membershipId } } } }
       },
-      include: { customer: true, branch: true, items: { include: { service: true } } },
+      include: { customer: true, branch: true, items: { include: { service: { include: { category: true } } } } },
       orderBy: { startAt: "asc" }
     }));
   });
@@ -86,10 +86,60 @@ export const registerMyPageRoutes = (ownerRouter) => {
     });
   });
 
+  ownerRouter.get("/my-payroll", requireSalonPermission("myPayroll", "view"), async (req, res) => {
+    const items = await prisma.payrollItem.findMany({
+      where: {
+        salonId: req.salonId,
+        userSalonId: req.user.membershipId
+      },
+      include: {
+        payrollRun: {
+          include: {
+            branch: true,
+            generatedByMembership: {
+              include: { user: true }
+            }
+          }
+        },
+        userSalon: {
+          include: {
+            user: true,
+            branch: true
+          }
+        }
+      },
+      orderBy: [
+        { payrollRun: { periodStart: "desc" } },
+        { createdAt: "desc" }
+      ]
+    });
+
+    const summary = items.reduce((accumulator, item) => {
+      accumulator.itemCount += 1;
+      accumulator.totalBaseSalary += toAmount(item.baseSalary);
+      accumulator.totalCommission += toAmount(item.commissionAmount);
+      accumulator.totalIncentive += toAmount(item.incentiveAmount);
+      accumulator.totalAdjustments += toAmount(item.adjustmentAmount);
+      accumulator.totalDeductions += toAmount(item.attendanceDeduction) + toAmount(item.leaveDeduction);
+      accumulator.totalNet += toAmount(item.netAmount);
+      return accumulator;
+    }, {
+      itemCount: 0,
+      totalBaseSalary: 0,
+      totalCommission: 0,
+      totalIncentive: 0,
+      totalAdjustments: 0,
+      totalDeductions: 0,
+      totalNet: 0
+    });
+
+    res.json({ summary, items });
+  });
+
   ownerRouter.get("/my-profile", requireSalonPermission("myProfile", "view"), async (req, res) => {
     const profile = await prisma.userSalon.findFirst({
       where: { id: req.user.membershipId, salonId: req.salonId },
-      include: { user: true, branch: true, serviceAssignments: { include: { service: true } } }
+      include: { user: true, branch: true, serviceAssignments: { include: { service: { include: { category: true } } } } }
     });
     res.json(profile);
   });
