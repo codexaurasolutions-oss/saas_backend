@@ -1,4 +1,5 @@
 import { prisma } from "../../../lib/prisma.js";
+import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { logCustomerTimeline } from "../../../lib/phase2.js";
 import { ensureProgramEnabled, getProgramSettings } from "../../../lib/settingsRules.js";
 import { requireSalonPermission } from "../../../middlewares/rbac.js";
@@ -125,10 +126,16 @@ export const registerMembershipRoutes = (ownerRouter) => {
         endsAt,
         remainingWalletValue: plan.benefitType === "WALLET_VALUE" ? plan.walletValue : null
       },
-      include: { membershipPlan: true }
+      include: { membershipPlan: true, customer: true }
     });
     await prisma.$transaction(async (tx) => {
       await logCustomerTimeline(tx, req.body.customerId, "MEMBERSHIP", "Membership assigned", plan.name, created.id);
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: created.customer?.email || "",
+      templateType: "membership_purchase_template",
+      context: { customerId: created.customerId, customerMembershipId: created.id }
     });
     res.status(201).json(created);
   });
@@ -150,6 +157,16 @@ export const registerMembershipRoutes = (ownerRouter) => {
       });
       await logCustomerTimeline(tx, membership.customerId, "MEMBERSHIP_RENEWAL", "Membership renewed", req.body.note || membership.membershipPlan.name, membership.id);
       return updated;
+    });
+    const renewedMembership = await prisma.customerMembership.findFirst({
+      where: { id: membership.id, salonId: req.salonId },
+      include: { customer: true, membershipPlan: true }
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: renewedMembership?.customer?.email || "",
+      templateType: "membership_purchase_template",
+      context: { customerId: renewedMembership?.customerId, customerMembershipId: renewedMembership?.id }
     });
     res.json(result);
   });
@@ -179,6 +196,16 @@ export const registerMembershipRoutes = (ownerRouter) => {
       });
       await logCustomerTimeline(tx, membership.customerId, "MEMBERSHIP_TOP_UP", "Membership top-up", `${req.body.amount}`, membership.id);
       return updated;
+    });
+    const toppedUpMembership = await prisma.customerMembership.findFirst({
+      where: { id: membership.id, salonId: req.salonId },
+      include: { customer: true, membershipPlan: true }
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: toppedUpMembership?.customer?.email || "",
+      templateType: "membership_purchase_template",
+      context: { customerId: toppedUpMembership?.customerId, customerMembershipId: toppedUpMembership?.id }
     });
     res.json(result);
   });
@@ -210,6 +237,16 @@ export const registerMembershipRoutes = (ownerRouter) => {
       });
       await logCustomerTimeline(tx, membership.customerId, "MEMBERSHIP_UPGRADE", "Membership upgraded", req.body.note || `${membership.membershipPlan.name} -> ${newPlan.name}`, membership.id);
       return updated;
+    });
+    const upgradedMembership = await prisma.customerMembership.findFirst({
+      where: { id: membership.id, salonId: req.salonId },
+      include: { customer: true, membershipPlan: true }
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: upgradedMembership?.customer?.email || "",
+      templateType: "membership_purchase_template",
+      context: { customerId: upgradedMembership?.customerId, customerMembershipId: upgradedMembership?.id }
     });
     res.json(result);
   });
@@ -314,10 +351,16 @@ export const registerMembershipRoutes = (ownerRouter) => {
         endsAt,
         remainingSessions: pack.totalSessions
       },
-      include: { package: true }
+      include: { package: true, customer: true }
     });
     await prisma.$transaction(async (tx) => {
       await logCustomerTimeline(tx, req.body.customerId, "PACKAGE", "Package assigned", pack.name, created.id);
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: created.customer?.email || "",
+      templateType: "package_purchase_template",
+      context: { customerId: created.customerId, customerPackageId: created.id }
     });
     res.status(201).json(created);
   });
@@ -343,6 +386,16 @@ export const registerMembershipRoutes = (ownerRouter) => {
       });
       await logCustomerTimeline(tx, customerPackage.customerId, "PACKAGE_RENEWAL", "Package renewed", req.body.note || customerPackage.package.name, customerPackage.id);
       return updated;
+    });
+    const renewedPackage = await prisma.customerPackage.findFirst({
+      where: { id: customerPackage.id, salonId: req.salonId },
+      include: { customer: true, package: true }
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: renewedPackage?.customer?.email || "",
+      templateType: "package_purchase_template",
+      context: { customerId: renewedPackage?.customerId, customerPackageId: renewedPackage?.id }
     });
     res.json(result);
   });

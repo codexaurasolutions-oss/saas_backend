@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { startAppointmentReminderScheduler } from "./lib/appointmentReminderScheduler.js";
 import { createApp } from "./app.js";
 
 dotenv.config();
@@ -9,4 +10,5 @@ const host = process.env.HOST || "0.0.0.0";
 
 app.listen(port, host, () => {
   console.log(`Backend running on ${host}:${port}`);
+  startAppointmentReminderScheduler();
 });

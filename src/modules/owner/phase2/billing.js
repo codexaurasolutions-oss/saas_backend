@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { prisma } from "../../../lib/prisma.js";
 import { addInvoicePayment, createPosInvoice, generatePaymentLink, getDayClosingSummary, logPaymentLinkPlaceholder, refundInvoice } from "../../../lib/pos.js";
 import { attachBranchStock, normalizeBranchId } from "../../../lib/phase2.js";
@@ -10,6 +11,54 @@ const paymentWhere = (salonId, branchId) => ({ salonId, ...(branchId ? { invoice
 const sendRouteError = (res, error, fallbackMessage) => {
   const status = Number(error?.status || error?.response?.status || 500);
   return res.status(status).json({ message: error?.message || fallbackMessage });
+};
+
+const sendInvoiceAutomationEmails = async (salonId, invoice) => {
+  const customerId = invoice?.customerId || null;
+  const toEmail = invoice?.customer?.email || "";
+  await attemptCustomerTemplateEmail({
+    salonId,
+    toEmail,
+    templateType: "invoice_template",
+    context: { invoiceId: invoice?.id, customerId }
+  });
+
+  const [soldMemberships, soldPackages] = await Promise.all([
+    prisma.customerMembership.findMany({
+      where: { soldInvoiceId: invoice?.id },
+      include: { membershipPlan: true, customer: true }
+    }),
+    prisma.customerPackage.findMany({
+      where: { soldInvoiceId: invoice?.id },
+      include: { package: true, customer: true }
+    })
+  ]);
+
+  for (const membership of soldMemberships) {
+    await attemptCustomerTemplateEmail({
+      salonId,
+      toEmail: membership.customer?.email || toEmail,
+      templateType: "membership_purchase_template",
+      context: {
+        customerId: membership.customerId,
+        customerMembershipId: membership.id,
+        invoiceId: invoice?.id
+      }
+    });
+  }
+
+  for (const customerPackage of soldPackages) {
+    await attemptCustomerTemplateEmail({
+      salonId,
+      toEmail: customerPackage.customer?.email || toEmail,
+      templateType: "package_purchase_template",
+      context: {
+        customerId: customerPackage.customerId,
+        customerPackageId: customerPackage.id,
+        invoiceId: invoice?.id
+      }
+    });
+  }
 };
 
 export const registerBillingRoutes = (ownerRouter) => {
@@ -73,7 +122,9 @@ export const registerBillingRoutes = (ownerRouter) => {
 
   ownerRouter.post("/pos/invoices", requireFeatureEnabled("pos"), requireSalonPermission("pos", "create"), validate(schemas.invoice), async (req, res) => {
     try {
-      res.status(201).json(await createPosInvoice({ salonId: req.salonId, actorUser: req.user, body: req.body }));
+      const invoice = await createPosInvoice({ salonId: req.salonId, actorUser: req.user, body: req.body });
+      await sendInvoiceAutomationEmails(req.salonId, invoice);
+      res.status(201).json(invoice);
     } catch (error) {
       return sendRouteError(res, error, "Could not create POS invoice");
     }
@@ -81,7 +132,9 @@ export const registerBillingRoutes = (ownerRouter) => {
 
   ownerRouter.post("/invoices", requireFeatureEnabled("pos"), requireSalonPermission("pos", "create"), validate(schemas.invoice), async (req, res) => {
     try {
-      res.status(201).json(await createPosInvoice({ salonId: req.salonId, actorUser: req.user, body: req.body }));
+      const invoice = await createPosInvoice({ salonId: req.salonId, actorUser: req.user, body: req.body });
+      await sendInvoiceAutomationEmails(req.salonId, invoice);
+      res.status(201).json(invoice);
     } catch (error) {
       return sendRouteError(res, error, "Could not create invoice");
     }
@@ -117,32 +170,57 @@ export const registerBillingRoutes = (ownerRouter) => {
   });
 
   ownerRouter.patch("/invoices/:id/cancel", requireSalonPermission("invoices", "edit"), async (req, res) => {
-    const invoice = await prisma.invoice.findFirst({ where: { id: req.params.id, salonId: req.salonId }, include: { payments: true } });
+    const invoice = await prisma.invoice.findFirst({ where: { id: req.params.id, salonId: req.salonId }, include: { payments: true, customer: true, branch: true } });
     if (!invoice) return res.status(404).json({ message: "Invoice not found" });
     if (invoice.status === "CANCELLED") return res.status(400).json({ message: "Invoice already cancelled" });
     if (invoice.payments.some((payment) => payment.amount > 0)) return res.status(400).json({ message: "Paid invoice requires refund flow instead of cancel" });
-    res.json(await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "CANCELLED", balanceAmount: 0 } }));
+    const cancelledInvoice = await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "CANCELLED", balanceAmount: 0 } });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: invoice.customer?.email || "",
+      templateType: "invoice_cancel_template",
+      context: { invoiceId: invoice.id, customerId: invoice.customerId }
+    });
+    res.json(cancelledInvoice);
   });
 
   ownerRouter.post("/payments", requireSalonPermission("payments", "create"), validate(schemas.payment), async (req, res) => {
-    res.status(201).json(await addInvoicePayment({
+    const payment = await addInvoicePayment({
       salonId: req.salonId,
       invoiceId: req.body.invoiceId,
       amount: req.body.amount,
       mode: req.body.mode,
       note: req.body.note,
       actorUser: req.user
-    }));
+    });
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: req.body.invoiceId, salonId: req.salonId },
+      include: { customer: true, branch: true }
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: invoice?.customer?.email || "",
+      templateType: "payment_receipt_template",
+      context: { invoiceId: invoice?.id, customerId: invoice?.customerId }
+    });
+    res.status(201).json(payment);
   });
 
   ownerRouter.post("/payments/refund", requireSalonPermission("payments", "edit"), validate(schemas.refundPayment), async (req, res) => {
-    res.json(await refundInvoice({
+    const invoice = await refundInvoice({
       salonId: req.salonId,
       invoiceId: req.body.invoiceId,
       amount: req.body.amount,
       note: req.body.note,
       actorUser: req.user
-    }));
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: invoice?.customer?.email || "",
+      templateType: "invoice_refund_template",
+      context: { invoiceId: invoice?.id, customerId: invoice?.customerId }
+    });
+    res.json(invoice);
   });
 
   ownerRouter.get("/payments", requireSalonPermission("payments", "view"), async (req, res) => {
@@ -212,6 +290,12 @@ export const registerBillingRoutes = (ownerRouter) => {
       data: {
         notes: [invoice.notes, note].filter(Boolean).join("\n")
       }
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: invoice.customer?.email || "",
+      templateType: "invoice_template",
+      context: { invoiceId: invoice.id, customerId: invoice.customerId }
     });
     res.status(201).json({
       invoiceId: updated.id,

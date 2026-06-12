@@ -1,5 +1,6 @@
 import { createOnlineOrder, createPublicAppointment, ensurePublicStoreEnabled, getPublicCatalogData, resolvePublicSalonBySlug, trackCatalogEvent, validateCartAgainstStock } from "../../lib/phase3.js";
 import { asyncHandler } from "../../lib/async-handler.js";
+import { attemptCustomerTemplateEmail } from "../../lib/emailNotifications.js";
 import { schemas, validate } from "../../middlewares/validate.js";
 
 export const registerPublicPhase3Routes = (publicRouter) => {
@@ -42,6 +43,13 @@ export const registerPublicPhase3Routes = (publicRouter) => {
   publicRouter.post("/salons/:slug/orders", validate(schemas.createOrder), asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     await ensurePublicStoreEnabled(salon.id);
-    res.status(201).json(await createOnlineOrder({ salonId: salon.id, body: req.body, source: "PUBLIC_STORE" }));
+    const order = await createOnlineOrder({ salonId: salon.id, body: req.body, source: "PUBLIC_STORE" });
+    await attemptCustomerTemplateEmail({
+      salonId: salon.id,
+      toEmail: order.customer?.email || req.body.customerEmail || "",
+      templateType: "order_confirmation",
+      context: { orderId: order.id, customerId: order.customerId }
+    });
+    res.status(201).json(order);
   }));
 };

@@ -3,6 +3,9 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = {
+  salonSetting: {
+    findFirst: vi.fn()
+  },
   coupon: {
     findFirst: vi.fn()
   },
@@ -81,6 +84,12 @@ describe("phase4 owner routes", () => {
       }
     }
     prismaMock.$transaction.mockImplementation(async (callback) => callback(prismaMock));
+    prismaMock.salonSetting.findFirst.mockResolvedValue({
+      advancedSettings: {
+        coupons: { enabled: true },
+        giftCards: { enabled: true }
+      }
+    });
   });
 
   it("blocks notification routes when the notifications feature is disabled", async () => {
@@ -168,8 +177,8 @@ describe("phase4 owner routes", () => {
         module: "SETTINGS",
         action: "SETTINGS_UPDATED",
         OR: expect.arrayContaining([
-          expect.objectContaining({ module: { contains: "branch", mode: "insensitive" } }),
-          expect.objectContaining({ summary: { contains: "branch", mode: "insensitive" } })
+          expect.objectContaining({ module: { contains: "branch" } }),
+          expect.objectContaining({ summary: { contains: "branch" } })
         ])
       })
     }));
@@ -195,8 +204,8 @@ describe("phase4 owner routes", () => {
           }),
           expect.objectContaining({
             OR: expect.arrayContaining([
-              expect.objectContaining({ title: { contains: "payment", mode: "insensitive" } }),
-              expect.objectContaining({ message: { contains: "payment", mode: "insensitive" } })
+              expect.objectContaining({ title: { contains: "payment" } }),
+              expect.objectContaining({ message: { contains: "payment" } })
             ])
           })
         ])

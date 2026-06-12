@@ -677,17 +677,34 @@ export const resolveTemplateContext = async (salonId, context = {}) => {
   ]);
 
   const resolvedCustomer = customer || appointment?.customer || invoice?.customer || order?.customer || membership?.customer || pack?.customer || null;
+  const resolvedBranchName = appointment?.branch?.name || invoice?.branch?.name || order?.branch?.name || salon?.name || "Main Branch";
+  const resolvedMembershipName = membership?.membershipPlan?.name || "";
+  const resolvedMembershipPrice = membership?.membershipPlan?.price != null ? Number(membership.membershipPlan.price || 0).toFixed(2) : "";
+  const resolvedPackageName = pack?.package?.name || "";
+  const resolvedPackagePrice = pack?.package?.price != null ? Number(pack.package.price || 0).toFixed(2) : "";
 
   const resolved = {
     customer_name: resolvedCustomer?.name || templateFallbacks.customer_name,
     customer_phone: resolvedCustomer?.phone || "",
+    customer_email: resolvedCustomer?.email || "",
     salon_name: salon?.name || templateFallbacks.salon_name,
+    branch_name: resolvedBranchName,
     appointment_date_time: appointment?.startAt ? new Date(appointment.startAt).toLocaleString() : templateFallbacks.appointment_date_time,
+    appointment_status: appointment?.status || "",
+    invoice_number: invoice?.invoiceNumber || "",
     invoice_amount: invoice ? Number(invoice.total || 0).toFixed(2) : templateFallbacks.invoice_amount,
+    invoice_paid_amount: invoice ? Number(invoice.paidAmount || 0).toFixed(2) : "0.00",
+    invoice_balance: invoice ? Number(invoice.balanceAmount || 0).toFixed(2) : "0.00",
+    invoice_refund_amount: invoice ? Number(invoice.refundAmount || 0).toFixed(2) : "0.00",
     membership_expiry: membership?.endsAt ? new Date(membership.endsAt).toLocaleDateString() : templateFallbacks.membership_expiry,
+    membership_name: resolvedMembershipName,
+    membership_price: resolvedMembershipPrice,
     package_balance: pack?.remainingSessions != null ? String(pack.remainingSessions) : templateFallbacks.package_balance,
+    package_name: resolvedPackageName,
+    package_price: resolvedPackagePrice,
     order_number: order?.orderNumber || templateFallbacks.order_number,
     order_amount: order ? Number(order.total || 0).toFixed(2) : templateFallbacks.order_amount,
+    order_status: order?.status || "",
     catalog_link: salon ? buildCatalogLink(salon.slug) : templateFallbacks.catalog_link,
     payment_link: invoice?.paymentLinkToken ? `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/pay/${invoice.paymentLinkToken}` : templateFallbacks.payment_link
   };
@@ -696,13 +713,25 @@ export const resolveTemplateContext = async (salonId, context = {}) => {
     ...resolved,
     customerName: resolved.customer_name,
     customerPhone: resolved.customer_phone,
+    customerEmail: resolved.customer_email,
     salonName: resolved.salon_name,
+    branchName: resolved.branch_name,
     appointmentDateTime: resolved.appointment_date_time,
+    appointmentStatus: resolved.appointment_status,
+    invoiceNumber: resolved.invoice_number,
     invoiceAmount: resolved.invoice_amount,
+    invoicePaidAmount: resolved.invoice_paid_amount,
+    invoiceBalance: resolved.invoice_balance,
+    invoiceRefundAmount: resolved.invoice_refund_amount,
     membershipExpiry: resolved.membership_expiry,
+    membershipName: resolved.membership_name,
+    membershipPrice: resolved.membership_price,
     packageBalance: resolved.package_balance,
+    packageName: resolved.package_name,
+    packagePrice: resolved.package_price,
     orderNumber: resolved.order_number,
     orderAmount: resolved.order_amount,
+    orderStatus: resolved.order_status,
     catalogLink: resolved.catalog_link,
     paymentLink: resolved.payment_link
   };

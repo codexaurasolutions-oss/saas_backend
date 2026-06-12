@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "../../../lib/prisma.js";
+import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { checkStaffAvailability, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
 import { attachSalonSettings, requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -9,6 +10,16 @@ const sendRouteError = (res, error, fallbackMessage) => {
   const status = error?.status || error?.response?.status || 500;
   const message = error?.message || fallbackMessage;
   return res.status(status).json({ message });
+};
+
+const notifyAppointmentEmail = async (salonId, appointment, templateType, extraVariables = {}) => {
+  await attemptCustomerTemplateEmail({
+    salonId,
+    toEmail: appointment?.customer?.email || "",
+    templateType,
+    context: { appointmentId: appointment?.id, customerId: appointment?.customerId },
+    extraVariables
+  });
 };
 
 export const registerAppointmentRoutes = (ownerRouter) => {
@@ -131,7 +142,11 @@ export const registerAppointmentRoutes = (ownerRouter) => {
         return appointment.id;
       });
 
-      res.status(201).json(await fetchAppointment(req.salonId, createdId));
+      const createdAppointment = await fetchAppointment(req.salonId, createdId);
+      await notifyAppointmentEmail(req.salonId, createdAppointment, "appointment_confirmation", {
+        appointment_status: createdAppointment?.status || "CONFIRMED"
+      });
+      res.status(201).json(createdAppointment);
     } catch (error) {
       return sendRouteError(res, error, "Could not create appointment");
     }
@@ -199,7 +214,11 @@ export const registerAppointmentRoutes = (ownerRouter) => {
         await logAppointmentChange(tx, existing.id, req.user.id, "UPDATED", existing.status, req.body.status || existing.status, "Appointment updated");
       });
 
-      res.json(await fetchAppointment(req.salonId, existing.id));
+      const updatedAppointment = await fetchAppointment(req.salonId, existing.id);
+      await notifyAppointmentEmail(req.salonId, updatedAppointment, "appointment_update", {
+        appointment_status: updatedAppointment?.status || req.body.status || existing.status
+      });
+      res.json(updatedAppointment);
     } catch (error) {
       return sendRouteError(res, error, "Could not update appointment");
     }
@@ -214,7 +233,11 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       await tx.appointment.update({ where: { id: appointment.id }, data: { status: req.body.status } });
       await logAppointmentChange(tx, appointment.id, req.user.id, "STATUS_CHANGED", appointment.status, req.body.status, req.body.note || null);
     });
-    res.json(await fetchAppointment(req.salonId, appointment.id));
+    const updatedAppointment = await fetchAppointment(req.salonId, appointment.id);
+    await notifyAppointmentEmail(req.salonId, updatedAppointment, "appointment_update", {
+      appointment_status: req.body.status
+    });
+    res.json(updatedAppointment);
   });
 
   ownerRouter.post("/appointments/:id/cancel", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "edit"), validate(schemas.appointmentNote), async (req, res) => {
@@ -228,7 +251,11 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       await logAppointmentChange(tx, appointment.id, req.user.id, "CANCELLED", appointment.status, "CANCELLED", req.body.note || "Appointment cancelled");
     });
 
-    res.json(await fetchAppointment(req.salonId, appointment.id));
+    const cancelledAppointment = await fetchAppointment(req.salonId, appointment.id);
+    await notifyAppointmentEmail(req.salonId, cancelledAppointment, "appointment_update", {
+      appointment_status: "CANCELLED"
+    });
+    res.json(cancelledAppointment);
   });
 
   ownerRouter.post("/appointments/:id/reschedule", requireFeatureEnabled("appointments"), requireSalonPermission("appointments", "edit"), attachSalonSettings, validate(schemas.appointmentReschedule), async (req, res) => {
@@ -291,7 +318,11 @@ export const registerAppointmentRoutes = (ownerRouter) => {
         await logAppointmentChange(tx, appointment.id, req.user.id, "RESCHEDULED", appointment.status, appointment.status, req.body.note || "Appointment rescheduled");
       });
 
-      res.json(await fetchAppointment(req.salonId, appointment.id));
+      const rescheduledAppointment = await fetchAppointment(req.salonId, appointment.id);
+      await notifyAppointmentEmail(req.salonId, rescheduledAppointment, "appointment_update", {
+        appointment_status: rescheduledAppointment?.status || "CONFIRMED"
+      });
+      res.json(rescheduledAppointment);
     } catch (error) {
       return sendRouteError(res, error, "Could not reschedule appointment");
     }
@@ -362,6 +393,15 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       return created;
     });
 
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: appointment?.customer?.email || "",
+      templateType: "invoice_template",
+      context: { invoiceId: invoice.id, customerId: appointment.customerId },
+      extraVariables: {
+        appointment_status: appointment.status
+      }
+    });
     res.status(201).json(invoice);
   });
 

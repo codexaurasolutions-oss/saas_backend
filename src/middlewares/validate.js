@@ -940,13 +940,18 @@ export const schemas = {
     })
   }),
   giftCardRedeem: z.object({
-    body: z.object({
-      customerId: z.string().nullable().optional(),
-      invoiceId: z.string().nullable().optional(),
-      orderId: z.string().nullable().optional(),
-      amountUsed: z.number().positive()
-    })
-  }),
+      body: z.object({
+        giftCardId: z.string().optional(),
+        id: z.string().optional(),
+        customerId: z.string().nullable().optional(),
+        invoiceId: z.string().nullable().optional(),
+        orderId: z.string().nullable().optional(),
+        amountUsed: z.number().positive()
+      }).refine((body) => Boolean(body.giftCardId || body.id), {
+        message: "giftCardId is required",
+        path: ["giftCardId"]
+      })
+    }),
   feedbackStatus: z.object({
     body: z.object({
       status: z.enum(["NEW", "REVIEWED", "CONTACTED", "RESOLVED"]),

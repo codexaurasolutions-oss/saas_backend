@@ -1,4 +1,5 @@
 import { prisma } from "../../../lib/prisma.js";
+import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { convertOrderToInvoice, createOnlineOrder, reverseOrderStock } from "../../../lib/phase3.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -148,6 +149,12 @@ export const registerEcommerceRoutes = (ownerRouter) => {
       }
       return tx.onlineOrder.findUnique({ where: { id: row.id }, include: includeOrder });
     });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: updated.customer?.email || "",
+      templateType: "order_status_update",
+      context: { orderId: updated.id, customerId: updated.customerId }
+    });
     res.json(updated);
   });
   ownerRouter.patch("/orders/:id/cancel", requireFeatureEnabled("onlineOrders"), requireSalonPermission("orders", "edit"), validate(schemas.appointmentNote), async (req, res) => {
@@ -179,6 +186,13 @@ export const registerEcommerceRoutes = (ownerRouter) => {
       }
       return tx.onlineOrder.findUnique({ where: { id: row.id }, include: includeOrder });
     });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: updated.customer?.email || "",
+      templateType: "order_status_update",
+      context: { orderId: updated.id, customerId: updated.customerId },
+      extraVariables: { order_status: "CANCELLED" }
+    });
     res.json(updated);
   });
   ownerRouter.post("/orders/:id/convert-to-invoice", requireFeatureEnabled("onlineOrders"), requireSalonPermission("orders", "edit"), async (req, res) => {
@@ -186,6 +200,13 @@ export const registerEcommerceRoutes = (ownerRouter) => {
   });
 
   ownerRouter.post("/orders", requireFeatureEnabled("onlineOrders"), requireSalonPermission("orders", "create"), validate(schemas.createOrder), async (req, res) => {
-    res.status(201).json(await createOnlineOrder({ salonId: req.salonId, body: req.body, actorName: req.user.name, source: "OWNER_PANEL" }));
+    const order = await createOnlineOrder({ salonId: req.salonId, body: req.body, actorName: req.user.name, source: "OWNER_PANEL" });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: order.customer?.email || req.body.customerEmail || "",
+      templateType: "order_confirmation",
+      context: { orderId: order.id, customerId: order.customerId }
+    });
+    res.status(201).json(order);
   });
 };

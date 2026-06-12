@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
+import { attemptCustomerTemplateEmail } from "../../lib/emailNotifications.js";
 import { createOnlineOrder } from "../../lib/phase3.js";
 import { checkStaffAvailability, ensureScopedStaffMembership } from "../../lib/phase2.js";
 import { asyncHandler } from "../../lib/async-handler.js";
@@ -290,11 +291,18 @@ customerRouter.get("/orders/:id", requireCustomerAuth, requireCustomerPortalEnab
   res.json(row);
 }));
 customerRouter.post("/orders", requireCustomerAuth, requireCustomerPortalEnabled, validate(schemas.createOrder), asyncHandler(async (req, res) => {
-  res.status(201).json(await createOnlineOrder({
+  const order = await createOnlineOrder({
     salonId: req.user.salonId,
     body: { ...req.body, customerId: req.user.customerId },
     source: "CUSTOMER_PORTAL"
-  }));
+  });
+  await attemptCustomerTemplateEmail({
+    salonId: req.user.salonId,
+    toEmail: order.customer?.email || req.body.customerEmail || "",
+    templateType: "order_confirmation",
+    context: { orderId: order.id, customerId: order.customerId }
+  });
+  res.status(201).json(order);
 }));
 
 customerRouter.get("/coupons", requireCustomerAuth, requireCustomerPortalEnabled, asyncHandler(async (req, res) => {
