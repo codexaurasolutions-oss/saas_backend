@@ -30,18 +30,21 @@ export const registerAppointmentRoutes = (ownerRouter) => {
     const customerId = req.query.customerId ? String(req.query.customerId) : null;
     const from = req.query.from ? new Date(String(req.query.from)) : null;
     const to = req.query.to ? new Date(String(req.query.to)) : null;
+    const rangeWhere = (from || to)
+      ? {
+          AND: [
+            ...(to ? [{ startAt: { lte: to } }] : []),
+            ...(from ? [{ endAt: { gte: from } }] : [])
+          ]
+        }
+      : {};
     res.json(await prisma.appointment.findMany({
       where: {
         ...buildAppointmentScope(req, branchId),
         ...(status ? { status } : {}),
         ...(bookingChannel ? { bookingChannel } : {}),
         ...(customerId ? { customerId } : {}),
-        ...((from || to) ? {
-          startAt: {
-            ...(from ? { gte: from } : {}),
-            ...(to ? { lte: to } : {})
-          }
-        } : {})
+        ...rangeWhere
       },
       include: {
         customer: true,
@@ -58,7 +61,13 @@ export const registerAppointmentRoutes = (ownerRouter) => {
     const from = req.query.from ? new Date(String(req.query.from)) : new Date();
     const to = req.query.to ? new Date(String(req.query.to)) : new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
     res.json(await prisma.appointment.findMany({
-      where: { ...buildAppointmentScope(req, branchId), startAt: { gte: from, lte: to } },
+      where: {
+        ...buildAppointmentScope(req, branchId),
+        AND: [
+          { startAt: { lte: to } },
+          { endAt: { gte: from } }
+        ]
+      },
       include: {
         customer: true,
         primaryStaff: { include: { user: true } },
