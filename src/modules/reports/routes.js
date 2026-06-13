@@ -27,24 +27,60 @@ const buildSpreadsheetHtml = (headers, rows) => `<!DOCTYPE html>
   </body>
 </html>`;
 
-const buildInvoiceWhere = (req, branchId) => ({
-  salonId: req.salonId,
-  ...(branchId ? { branchId } : {}),
-  ...(isOwnScopedStaff(req, "reports") ? { items: { some: { staffUserSalonId: req.user.membershipId } } } : {})
-});
+const buildInvoiceWhere = (req, branchId) => {
+  const where = {
+    salonId: req.salonId,
+    ...(branchId ? { branchId } : {}),
+    ...(isOwnScopedStaff(req, "reports") ? { items: { some: { staffUserSalonId: req.user.membershipId } } } : {})
+  };
+  if (req.query.start || req.query.end) {
+    where.createdAt = {};
+    if (req.query.start) where.createdAt.gte = new Date(req.query.start);
+    if (req.query.end) {
+      const end = new Date(req.query.end);
+      end.setUTCHours(23, 59, 59, 999);
+      where.createdAt.lte = end;
+    }
+  }
+  return where;
+};
 
-const buildPaymentWhere = (req, branchId) => ({
-  salonId: req.salonId,
-  invoice: { is: buildInvoiceWhere(req, branchId) }
-});
+const buildPaymentWhere = (req, branchId) => {
+  const where = {
+    salonId: req.salonId,
+    invoice: { is: buildInvoiceWhere(req, branchId) }
+  };
+  if (req.query.start || req.query.end) {
+    where.createdAt = {};
+    if (req.query.start) where.createdAt.gte = new Date(req.query.start);
+    if (req.query.end) {
+      const end = new Date(req.query.end);
+      end.setUTCHours(23, 59, 59, 999);
+      where.createdAt.lte = end;
+    }
+  }
+  return where;
+};
 
-const buildAppointmentWhere = (req, branchId) => ({
-  salonId: req.salonId,
-  ...(branchId ? { branchId } : {}),
-  ...(isOwnScopedStaff(req, "reports")
-    ? { items: { some: { assignedStaff: { some: { userSalonId: req.user.membershipId } } } } }
-    : {})
-});
+const buildAppointmentWhere = (req, branchId) => {
+  const where = {
+    salonId: req.salonId,
+    ...(branchId ? { branchId } : {}),
+    ...(isOwnScopedStaff(req, "reports")
+      ? { items: { some: { assignedStaff: { some: { userSalonId: req.user.membershipId } } } } }
+      : {})
+  };
+  if (req.query.start || req.query.end) {
+    where.startAt = {};
+    if (req.query.start) where.startAt.gte = new Date(req.query.start);
+    if (req.query.end) {
+      const end = new Date(req.query.end);
+      end.setUTCHours(23, 59, 59, 999);
+      where.startAt.lte = end;
+    }
+  }
+  return where;
+};
 
 reportsRouter.get("/sales-summary", async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);

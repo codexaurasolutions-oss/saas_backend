@@ -1,6 +1,17 @@
 import { toAmount, normalizeBranchId, isOwnScopedStaff } from "../../lib/phase2.js";
 
 export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere) => {
+const buildDateFilter = (req, field = "createdAt") => {
+  const filter = {};
+  if (req.query.start) filter.gte = new Date(req.query.start);
+  if (req.query.end) {
+    const end = new Date(req.query.end);
+    end.setUTCHours(23, 59, 59, 999);
+    filter.lte = end;
+  }
+  return Object.keys(filter).length > 0 ? { [field]: filter } : {};
+};
+
 
   reportsRouter.get("/service-reminder", async (req, res) => {
     const customers = await prisma.customer.findMany({
@@ -61,7 +72,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/staff-attendance", async (req, res) => {
     const records = await prisma.attendanceRecord.findMany({
-      where: { salonId: req.salonId },
+      where: { salonId: req.salonId, ...buildDateFilter(req, "date") },
       include: { staff: { include: { user: true } } },
       orderBy: { date: "desc" }
     });
@@ -77,7 +88,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/membership-redemption", async (req, res) => {
     const logs = await prisma.membershipUsage.findMany({
-      where: { customerMembership: { salonId: req.salonId } },
+      where: { customerMembership: { salonId: req.salonId }, ...buildDateFilter(req) },
       include: { customerMembership: { include: { customer: true, membershipPlan: true } } },
       orderBy: { createdAt: "desc" }
     });
@@ -93,7 +104,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/package-redemption", async (req, res) => {
     const logs = await prisma.packageUsage.findMany({
-      where: { customerPackage: { salonId: req.salonId } },
+      where: { customerPackage: { salonId: req.salonId }, ...buildDateFilter(req) },
       include: { customerPackage: { include: { customer: true, package: true } } },
       orderBy: { createdAt: "desc" }
     });
@@ -109,7 +120,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/gift-card-sold", async (req, res) => {
     const cards = await prisma.giftCard.findMany({
-      where: { salonId: req.salonId },
+      where: { salonId: req.salonId, ...buildDateFilter(req) },
       include: { issuedTo: true, branch: true },
       orderBy: { createdAt: "desc" }
     });
@@ -125,7 +136,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/gift-card-redemption", async (req, res) => {
     const redemptions = await prisma.giftCardRedemption.findMany({
-      where: { giftCard: { salonId: req.salonId } },
+      where: { giftCard: { salonId: req.salonId }, ...buildDateFilter(req) },
       include: { giftCard: true, invoice: true, customer: true },
       orderBy: { createdAt: "desc" }
     });
@@ -141,7 +152,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/advance-received", async (req, res) => {
     const payments = await prisma.payment.findMany({
-      where: { salonId: req.salonId, type: "ADVANCE" },
+      where: { salonId: req.salonId, type: "ADVANCE", ...buildDateFilter(req) },
       include: { invoice: { include: { customer: true, items: true } } },
       orderBy: { createdAt: "desc" }
     });
@@ -157,7 +168,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/balance-received", async (req, res) => {
     const payments = await prisma.payment.findMany({
-      where: { salonId: req.salonId, type: "BALANCE" },
+      where: { salonId: req.salonId, type: "BALANCE", ...buildDateFilter(req) },
       include: { invoice: { include: { customer: true, items: true } } },
       orderBy: { createdAt: "desc" }
     });
@@ -190,7 +201,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/guest-followups", async (req, res) => {
     const enquiries = await prisma.enquiry.findMany({
-      where: { salonId: req.salonId },
+      where: { salonId: req.salonId, ...buildDateFilter(req) },
       orderBy: { createdAt: "desc" }
     });
     res.json(enquiries.map(e => ({
@@ -205,7 +216,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
   reportsRouter.get("/inventory-transaction", async (req, res) => {
     const branchId = normalizeBranchId(req.query.branchId);
     const movs = await prisma.stockMovement.findMany({
-      where: { salonId: req.salonId, ...(branchId ? { branchId } : {}) },
+      where: { salonId: req.salonId, ...(branchId ? { branchId } : {}), ...buildDateFilter(req) },
       include: { product: true, branch: true },
       orderBy: { createdAt: "desc" }
     });
@@ -247,7 +258,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/complimentary", async (req, res) => {
     const invoices = await prisma.invoice.findMany({
-      where: { salonId: req.salonId, total: 0, status: "PAID" },
+      where: { salonId: req.salonId, total: 0, status: "PAID", ...buildDateFilter(req) },
       include: { customer: true, items: true },
       orderBy: { createdAt: "desc" }
     });
@@ -285,7 +296,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/material-received", async (req, res) => {
     const movs = await prisma.stockMovement.findMany({
-      where: { salonId: req.salonId, movementType: "PURCHASE_RECEIVED" },
+      where: { salonId: req.salonId, movementType: "PURCHASE_RECEIVED", ...buildDateFilter(req) },
       include: { product: true },
       orderBy: { createdAt: "desc" }
     });
@@ -302,7 +313,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/reconcile-stock", async (req, res) => {
     const recons = await prisma.stockReconciliation.findMany({
-      where: { salonId: req.salonId },
+      where: { salonId: req.salonId, ...buildDateFilter(req) },
       orderBy: { createdAt: "desc" }
     });
     res.json(recons.map(r => ({
@@ -317,7 +328,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/consumable-tracking", async (req, res) => {
     const movs = await prisma.stockMovement.findMany({
-      where: { salonId: req.salonId, movementType: "CONSUMABLE_USAGE" },
+      where: { salonId: req.salonId, movementType: "CONSUMABLE_USAGE", ...buildDateFilter(req) },
       include: { product: true },
       orderBy: { createdAt: "desc" }
     });
@@ -336,7 +347,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/purchase-order", async (req, res) => {
     const pos = await prisma.purchaseOrder.findMany({
-      where: { salonId: req.salonId },
+      where: { salonId: req.salonId, ...buildDateFilter(req) },
       include: { vendor: true, items: { include: { product: true } } },
       orderBy: { createdAt: "desc" }
     });
@@ -392,7 +403,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
   reportsRouter.get("/daily-stock", async (req, res) => {
     const branchId = normalizeBranchId(req.query.branchId);
     const movs = await prisma.stockMovement.findMany({
-      where: { salonId: req.salonId, ...(branchId ? { branchId } : {}) },
+      where: { salonId: req.salonId, ...(branchId ? { branchId } : {}), ...buildDateFilter(req) },
       include: { product: { include: { category: true } } },
       orderBy: { createdAt: "desc" }
     });
@@ -410,7 +421,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
   reportsRouter.get("/stock-transaction", async (req, res) => {
     const branchId = normalizeBranchId(req.query.branchId);
     const movs = await prisma.stockMovement.findMany({
-      where: { salonId: req.salonId, ...(branchId ? { branchId } : {}) },
+      where: { salonId: req.salonId, ...(branchId ? { branchId } : {}), ...buildDateFilter(req) },
       include: { product: true },
       orderBy: { createdAt: "desc" }
     });
@@ -456,8 +467,8 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
   });
 
   reportsRouter.get("/pnl-report", async (req, res) => {
-    const invoices = await prisma.invoice.findMany({ where: { salonId: req.salonId, status: { not: "CANCELLED" } } });
-    const expenses = await prisma.expense.findMany({ where: { salonId: req.salonId, status: { in: ["APPROVED", "PAID"] } } });
+    const invoices = await prisma.invoice.findMany({ where: { salonId: req.salonId, status: { not: "CANCELLED" }, ...buildDateFilter(req) } });
+    const expenses = await prisma.expense.findMany({ where: { salonId: req.salonId, status: { in: ["APPROVED", "PAID"] }, ...buildDateFilter(req) } });
     
     const grouped = {};
     invoices.forEach(inv => {
@@ -489,7 +500,7 @@ export const registerExtendedReports = (reportsRouter, prisma, buildInvoiceWhere
 
   reportsRouter.get("/coupon-redemption", async (req, res) => {
     const redemptions = await prisma.couponRedemption.findMany({
-      where: { coupon: { salonId: req.salonId } },
+      where: { coupon: { salonId: req.salonId }, ...buildDateFilter(req) },
       include: { coupon: true, invoice: true, customer: true },
       orderBy: { createdAt: "desc" }
     });
