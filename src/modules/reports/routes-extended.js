@@ -516,20 +516,32 @@ const buildDateFilter = (req, field = "createdAt") => {
     const branchId = normalizeBranchId(req.query.branchId);
     const invoices = await prisma.invoice.findMany({
       where: buildInvoiceWhere(req, branchId),
-      include: { customer: true, items: true },
+      include: { customer: true, items: true, payments: true },
       orderBy: { createdAt: "desc" }
     });
-    res.json(invoices.map(inv => ({
-      date: new Date(inv.createdAt).toLocaleDateString(),
-      invoiceNumber: inv.invoiceNumber,
-      customer: inv.customer?.name || "Walk-in",
-      services: inv.items.filter(i => i.itemType === "SERVICE").length,
-      products: inv.items.filter(i => i.itemType === "PRODUCT").length,
-      discount: toAmount(inv.discount),
-      tax: toAmount(inv.tax),
-      total: toAmount(inv.total),
-      paid: toAmount(inv.paidAmount),
-      due: Math.max(0, toAmount(inv.total) - toAmount(inv.paidAmount) - toAmount(inv.refundAmount))
-    })));
+    res.json(invoices.map(inv => {
+      const servicesNames = inv.items.filter(i => i.itemType === "SERVICE").map(i => i.serviceName).filter(Boolean).join(", ");
+      const productsNames = inv.items.filter(i => i.itemType === "PRODUCT").map(i => i.serviceName).filter(Boolean).join(", ");
+      const itemsList = [servicesNames, productsNames].filter(Boolean).join(" | ");
+      const paymentModes = inv.payments.map(p => p.mode).filter(Boolean).join(", ");
+
+      const dateObj = new Date(inv.createdAt || Date.now());
+
+      return {
+        "DATE": dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
+        "TIME": dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        "INVOICE NO": inv.invoiceNumber,
+        "GUEST NAME": inv.customer?.name || "Walk-in",
+        "GUEST NUMBER": inv.customer?.phone || "-",
+        "ITEMS": itemsList || "-",
+        "GROSS AMOUNT": toAmount(inv.subtotal || inv.total),
+        "DISCOUNT": toAmount(inv.discount),
+        "TAX": toAmount(inv.tax),
+        "NET TOTAL": toAmount(inv.total),
+        "PAID AMOUNT": toAmount(inv.paidAmount),
+        "DUE AMOUNT": Math.max(0, toAmount(inv.total) - toAmount(inv.paidAmount) - toAmount(inv.refundAmount)),
+        "PAYMENT MODE": paymentModes || "Unpaid"
+      };
+    }));
   });
 };

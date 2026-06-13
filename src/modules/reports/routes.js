@@ -217,7 +217,7 @@ reportsRouter.get("/service-sales", async (req, res) => {
       service: { include: { category: true } },
       staff: { include: { user: true } }
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { invoice: { createdAt: "desc" } }
   });
 
   const formatted = rows.map(row => {
