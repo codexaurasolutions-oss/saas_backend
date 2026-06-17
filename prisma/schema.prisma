@@ -36,6 +36,7 @@ enum PaymentMode {
   BANK_TRANSFER
   WALLET
   ONLINE
+  BALANCE
 }
 
 enum InvoiceStatus {
