@@ -296,8 +296,11 @@ export const registerBillingRoutes = (ownerRouter) => {
           }
         }
         const taxPct = Math.max(0, toAmount(rawItem?.taxPct || 0));
+        const inclusiveTax = req.advancedSettings?.taxMapping?.inclusiveTax === true;
         const lineBase = unitPrice * qty;
-        const lineTax = (lineBase * taxPct) / 100;
+        const lineTax = inclusiveTax && taxPct > 0
+          ? (lineBase * taxPct) / (100 + taxPct)
+          : (lineBase * taxPct) / 100;
         let staffName = rawItem?.staffName || null;
         let staffUserSalonId = rawItem?.staffUserSalonId || rawItem?.staffUserId || null;
 
@@ -368,13 +371,20 @@ export const registerBillingRoutes = (ownerRouter) => {
           qty,
           unitPrice,
           taxPct,
-          lineTotal: lineBase + lineTax,
+          lineTotal: inclusiveTax && taxPct > 0 ? lineBase : lineBase + lineTax,
           tipAmount: Math.max(0, toAmount(rawItem?.tipAmount || 0))
         });
       }
 
+      const inclusiveTax = req.advancedSettings?.taxMapping?.inclusiveTax === true;
       const subtotal = sanitizedItems.reduce((sum, item) => sum + (toAmount(item.unitPrice) * Number(item.qty || 1)), 0);
-      const tax = sanitizedItems.reduce((sum, item) => sum + (((toAmount(item.unitPrice) * Number(item.qty || 1)) * toAmount(item.taxPct)) / 100), 0);
+      const tax = inclusiveTax
+        ? sanitizedItems.reduce((sum, item) => {
+            const preTax = toAmount(item.unitPrice) * Number(item.qty || 1);
+            const tp = toAmount(item.taxPct);
+            return sum + (tp > 0 ? (preTax * tp) / (100 + tp) : 0);
+          }, 0)
+        : sanitizedItems.reduce((sum, item) => sum + (((toAmount(item.unitPrice) * Number(item.qty || 1)) * toAmount(item.taxPct)) / 100), 0);
       const discount = Math.max(0, toAmount(req.body?.discount ?? existingInvoice.discount ?? 0));
       const total = Math.max(0, subtotal + tax - discount);
       const paidAmount = Math.max(0, toAmount(existingInvoice.paidAmount || 0));

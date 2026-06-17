@@ -366,11 +366,15 @@ export const registerAppointmentRoutes = (ownerRouter) => {
 
     const invoice = await prisma.$transaction(async (tx) => {
       const settings = await getSalonSetting(tx, req.salonId, appointment.branchId);
+      const advancedSettings = typeof settings?.advancedSettings === "object" ? settings.advancedSettings : {};
+      const inclusiveTax = advancedSettings?.taxMapping?.inclusiveTax === true;
       const invoiceNumber = await nextNumber(tx, "invoice", req.salonId, settings?.invoicePrefix || "INV");
       const items = appointment.items.map((item) => {
         const unitPrice = toAmount(item.service.price);
         const taxPct = toAmount(item.service.taxRate || 0);
-        const lineTotal = unitPrice + (unitPrice * taxPct) / 100;
+        const lineTotal = inclusiveTax && taxPct > 0
+          ? unitPrice
+          : unitPrice + (unitPrice * taxPct) / 100;
         const firstStaff = item.assignedStaff[0]?.userSalonId || null;
         return {
           serviceId: item.serviceId,
@@ -384,7 +388,13 @@ export const registerAppointmentRoutes = (ownerRouter) => {
         };
       });
       const subtotal = items.reduce((sum, item) => sum + toAmount(item.unitPrice) * item.qty, 0);
-      const tax = items.reduce((sum, item) => sum + (toAmount(item.unitPrice) * item.qty * toAmount(item.taxPct)) / 100, 0);
+      const tax = inclusiveTax
+        ? items.reduce((sum, item) => {
+            const preTax = toAmount(item.unitPrice) * item.qty;
+            const tp = toAmount(item.taxPct);
+            return sum + (tp > 0 ? (preTax * tp) / (100 + tp) : 0);
+          }, 0)
+        : items.reduce((sum, item) => sum + (toAmount(item.unitPrice) * item.qty * toAmount(item.taxPct)) / 100, 0);
       const total = subtotal + tax;
 
       const created = await tx.invoice.create({

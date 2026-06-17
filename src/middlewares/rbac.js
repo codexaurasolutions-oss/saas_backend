@@ -12,6 +12,7 @@ export const requireSystemRole = (...roles) => (req, res, next) => {
 
 export const requireSalonPermission = (moduleKey, action = "view") => (req, res, next) => {
   if (req.user.systemRole === "SUPER_ADMIN") return next();
+  if (req.user.salonRole === "SALON_OWNER") return next();
   const perms = req.user.permissions || {};
   const allowed = perms[moduleKey]?.includes(action);
   if (!allowed) return res.status(403).json({ message: `No permission: ${moduleKey}.${action}` });
