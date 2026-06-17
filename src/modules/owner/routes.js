@@ -1152,7 +1152,21 @@ ownerRouter.get("/customers/:id", requireSalonPermission("customers", "view"), a
     }
   });
   if (!customer) return res.status(404).json({ message: "Customer not found" });
-  res.json(customer);
+  const followUps = [];
+  if (customer.followUpAt) {
+    const notesLines = (customer.notes || "").split("\n").filter(l => l.startsWith("[Follow-up"));
+    notesLines.forEach(line => {
+      const match = line.match(/\[Follow-up (\w+) ([^\]]+)\] (.+)/);
+      if (match) {
+        followUps.push({ type: match[1], date: match[2], message: match[3], status: "scheduled" });
+      }
+    });
+  }
+  const familyMembers = await prisma.customer.findMany({
+    where: { salonId: req.salonId, notes: { contains: `familyMemberOf:${customer.id}` } },
+    select: { id: true, name: true, phone: true, createdAt: true }
+  });
+  res.json({ ...customer, followUps, familyMembers });
 });
 
 ownerRouter.get("/users/export.csv", requireSalonPermission("staff", "view"), attachSalonSettings, async (req, res) => {
@@ -1742,4 +1756,25 @@ ownerRouter.post("/advance-payments", requireSalonPermission("customers", "creat
     res.status(500).json({ error: "Failed to create advance payment" });
   }
 });
+
+ownerRouter.post("/follow-ups", requireSalonPermission("customers", "edit"), async (req, res) => {
+  try {
+    const { customerId, date, time, message, type } = req.body;
+    if (!customerId || !date || !message) return res.status(400).json({ error: "customerId, date, and message are required" });
+    const customer = await prisma.customer.findFirst({ where: { id: customerId, salonId: req.salonId } });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    const followUpDate = time ? new Date(`${date}T${time}`) : new Date(date);
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        followUpAt: followUpDate,
+        notes: `${customer.notes || ""}\n[Follow-up ${type || "call"} ${date}${time ? ` ${time}` : ""}] ${message}`.trim()
+      }
+    });
+    res.json({ id: customerId, date: followUpDate, message, type: type || "call", status: "scheduled" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create follow-up" });
+  }
+});
+
 
