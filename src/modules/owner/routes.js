@@ -1444,53 +1444,50 @@ ownerRouter.get("/settings/designations", requireSalonPermission("settings", "vi
   const advanced = typeof row?.advancedSettings === "object" ? row.advancedSettings : {};
   res.json(advanced.designations || []);
 });
-ownerRouter.post("/settings", requireSalonPermission("settings", "edit"), validate(schemas.salonSettings), async (req, res) => {
-  const branchId = req.body.branchId || null;
-  const payload = {
-    invoicePrefix: req.body.invoicePrefix,
-    invoiceFooter: req.body.invoiceFooter,
-    taxLabel: req.body.taxLabel,
-    paymentModes: req.body.paymentModes,
-    whatsappNumber: req.body.whatsappNumber || null,
-    bookingNotes: req.body.bookingNotes || null,
-    cancellationPolicy: req.body.cancellationPolicy || null,
-    allowNegativeStock: Boolean(req.body.allowNegativeStock),
-    paymentGatewaySettings: req.body.paymentGatewaySettings || null,
-    advancedSettings: req.body.advancedSettings || null,
-    smsSettings: req.body.smsSettings || null
-  };
-  const existing = await prisma.salonSetting.findFirst({
-    where: { salonId: req.salonId, branchId }
-  });
-  const row = existing
-    ? await prisma.salonSetting.update({
-        where: { id: existing.id },
-        data: payload
-      })
-    : await prisma.salonSetting.create({
-        data: { salonId: req.salonId, ...payload, branchId }
-      });
-  if (!branchId) {
-    await syncGenericSettingsToPublicChannels(req.salonId, payload);
-    await syncAdvancedSettingsToOperationalDefaults(req.salonId, payload);
-  }
-  await createAuditLog({
-    salonId: req.salonId,
-    actorUserId: req.user.userId,
-    actorMembershipId: req.user.membershipId,
-    module: "SETTINGS",
-    action: existing ? "SETTINGS_UPDATED" : "SETTINGS_CREATED",
-    entityType: "SalonSetting",
-    entityId: row.id,
-    summary: branchId ? "Branch-level settings saved" : "Salon settings saved",
-    metadata: {
-      branchId,
-      paymentModes: payload.paymentModes,
-      allowNegativeStock: payload.allowNegativeStock,
-      paymentLinkEnabled: payload.paymentGatewaySettings?.paymentLinkEnabled ?? null
+ownerRouter.post("/settings", requireSalonPermission("settings", "edit"), async (req, res) => {
+  try {
+    const branchId = req.body.branchId || null;
+    const sanitizeJson = (val) => {
+      if (val === null || val === undefined) return null;
+      if (typeof val === "string") {
+        try { return JSON.parse(val); } catch { return val; }
+      }
+      return JSON.parse(JSON.stringify(val));
+    };
+    const payload = {
+      invoicePrefix: req.body.invoicePrefix || undefined,
+      invoiceFooter: req.body.invoiceFooter || undefined,
+      taxLabel: req.body.taxLabel || undefined,
+      paymentModes: sanitizeJson(req.body.paymentModes),
+      whatsappNumber: req.body.whatsappNumber || null,
+      bookingNotes: req.body.bookingNotes || null,
+      cancellationPolicy: req.body.cancellationPolicy || null,
+      allowNegativeStock: Boolean(req.body.allowNegativeStock),
+      paymentGatewaySettings: sanitizeJson(req.body.paymentGatewaySettings),
+      advancedSettings: sanitizeJson(req.body.advancedSettings),
+      smsSettings: sanitizeJson(req.body.smsSettings)
+    };
+    const existing = await prisma.salonSetting.findFirst({
+      where: { salonId: req.salonId, branchId }
+    });
+    const row = existing
+      ? await prisma.salonSetting.update({ where: { id: existing.id }, data: payload })
+      : await prisma.salonSetting.create({ data: { salonId: req.salonId, ...payload, branchId } });
+    if (!branchId) {
+      await syncGenericSettingsToPublicChannels(req.salonId, payload);
+      await syncAdvancedSettingsToOperationalDefaults(req.salonId, payload);
     }
-  });
-  res.status(201).json(row);
+    await createAuditLog({
+      salonId: req.salonId, actorUserId: req.user.userId, actorMembershipId: req.user.membershipId,
+      module: "SETTINGS", action: existing ? "SETTINGS_UPDATED" : "SETTINGS_CREATED",
+      entityType: "SalonSetting", entityId: row.id,
+      summary: branchId ? "Branch-level settings saved" : "Salon settings saved"
+    });
+    res.status(201).json(row);
+  } catch (err) {
+    console.error("Settings update error:", err.message);
+    res.status(500).json({ message: "Failed to update settings", error: err.message });
+  }
 });
 
 ownerRouter.post("/settings/crm-segment-preview", requireSalonPermission("settings", "view"), async (req, res) => {
