@@ -545,8 +545,8 @@ export const schemas = {
       branchId: z.string().nullable().optional(),
       name: z.string().min(2),
       firmName: optionalString,
-      phone: optionalIndianPhoneSchema,
-      alternateMobile: optionalIndianPhoneSchema,
+      phone: z.union([z.literal(""), z.string().trim().min(6)]).optional().transform(v => v || undefined),
+      alternateMobile: z.union([z.literal(""), z.string().trim().min(6)]).optional().transform(v => v || undefined),
       email: optionalEmailLike,
       gstNumber: optionalString,
       address: optionalString,
@@ -558,7 +558,6 @@ export const schemas = {
       isActive: z.boolean().optional()
     })
   }),
-  vendorItem: z.object({
     body: z.object({
       productId: idSchema,
       price: z.number().min(0),
