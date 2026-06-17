@@ -867,20 +867,43 @@ model StockMovement {
 }
 
 model Vendor {
-  id             String          @id @default(cuid())
-  salonId        String
-  branchId       String?
-  name           String
-  phone          String?
-  email          String?
-  address        String?
-  notes          String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  salon          Salon           @relation(fields: [salonId], references: [id])
-  branch         Branch?         @relation(fields: [branchId], references: [id])
-  purchaseOrders PurchaseOrder[]
-  expenses       Expense[]
+  id              String          @id @default(cuid())
+  salonId         String
+  branchId        String?
+  name            String
+  firmName        String?
+  phone           String?
+  alternateMobile String?
+  email           String?
+  gstNumber       String?
+  address         String?
+  area            String?
+  landmark        String?
+  city            String?
+  pincode         String?
+  notes           String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  salon           Salon           @relation(fields: [salonId], references: [id])
+  branch          Branch?         @relation(fields: [branchId], references: [id])
+  purchaseOrders  PurchaseOrder[]
+  expenses        Expense[]
+  items           VendorItem[]
+}
+
+model VendorItem {
+  id         String   @id @default(cuid())
+  salonId    String
+  vendorId   String
+  productId  String
+  price      Decimal  @default(0) @db.Decimal(12, 2)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  vendor     Vendor   @relation(fields: [vendorId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id])
+
+  @@unique([vendorId, productId])
 }
 
 model PurchaseOrder {

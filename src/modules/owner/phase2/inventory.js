@@ -196,11 +196,85 @@ export const registerInventoryRoutes = (ownerRouter) => {
   });
 
   ownerRouter.get("/purchases/vendors", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
-    res.json(await prisma.vendor.findMany({ where: { salonId: req.salonId, isActive: true }, orderBy: { createdAt: "desc" } }));
+    res.json(await prisma.vendor.findMany({
+      where: { salonId: req.salonId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        items: {
+          where: { isActive: true },
+          include: { product: { select: { id: true, name: true } } }
+        }
+      }
+    }));
+  });
+
+  ownerRouter.get("/purchases/vendors/:id", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
+    const vendor = await prisma.vendor.findFirst({
+      where: { id: req.params.id, salonId: req.salonId },
+      include: {
+        items: {
+          include: { product: { select: { id: true, name: true } } }
+        }
+      }
+    });
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+    res.json(vendor);
   });
 
   ownerRouter.post("/purchases/vendors", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "create"), validate(schemas.vendor), async (req, res) => {
-    res.status(201).json(await prisma.vendor.create({ data: { salonId: req.salonId, ...req.body, branchId: req.body.branchId || null, email: req.body.email || null } }));
+    res.status(201).json(await prisma.vendor.create({ data: { salonId: req.salonId, ...req.body, branchId: req.body.branchId || null } }));
+  });
+
+  ownerRouter.patch("/purchases/vendors/:id", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), validate(schemas.vendor), async (req, res) => {
+    const vendor = await prisma.vendor.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+    res.json(await prisma.vendor.update({
+      where: { id: vendor.id },
+      data: { ...req.body, branchId: req.body.branchId || null }
+    }));
+  });
+
+  ownerRouter.get("/purchases/vendors/:id/items", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
+    const items = await prisma.vendorItem.findMany({
+      where: { vendorId: req.params.id, salonId: req.salonId },
+      include: { product: { select: { id: true, name: true } } },
+      orderBy: { createdAt: "desc" }
+    });
+    res.json(items);
+  });
+
+  ownerRouter.post("/purchases/vendors/:id/items", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), validate(schemas.vendorItem), async (req, res) => {
+    const vendor = await prisma.vendor.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+    const product = await prisma.product.findFirst({ where: { id: req.body.productId, salonId: req.salonId } });
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    const existing = await prisma.vendorItem.findFirst({ where: { vendorId: vendor.id, productId: product.id } });
+    if (existing) {
+      res.json(await prisma.vendorItem.update({
+        where: { id: existing.id },
+        data: { price: req.body.price, isActive: req.body.isActive ?? true }
+      }));
+    } else {
+      res.status(201).json(await prisma.vendorItem.create({
+        data: { salonId: req.salonId, vendorId: vendor.id, productId: product.id, price: req.body.price, isActive: req.body.isActive ?? true }
+      }));
+    }
+  });
+
+  ownerRouter.patch("/purchases/vendor-items/:itemId", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), async (req, res) => {
+    const item = await prisma.vendorItem.findFirst({ where: { id: req.params.itemId, salonId: req.salonId } });
+    if (!item) return res.status(404).json({ message: "Vendor item not found" });
+    res.json(await prisma.vendorItem.update({
+      where: { id: item.id },
+      data: { ...req.body }
+    }));
+  });
+
+  ownerRouter.delete("/purchases/vendor-items/:itemId", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "delete"), async (req, res) => {
+    const item = await prisma.vendorItem.findFirst({ where: { id: req.params.itemId, salonId: req.salonId } });
+    if (!item) return res.status(404).json({ message: "Vendor item not found" });
+    await prisma.vendorItem.delete({ where: { id: item.id } });
+    res.json({ message: "Vendor item deleted" });
   });
 
   ownerRouter.get("/purchases/orders", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {

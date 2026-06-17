@@ -145,7 +145,7 @@ const normalizeIndianPhone = (value) => {
 };
 const indianPhoneSchema = z.string().trim()
   .transform(normalizeIndianPhone)
-  .refine((value) => /^\+91[6-9]\d{9}$/.test(value), "Enter a valid Indian +91 mobile number");
+  .refine((value) => /^\+\d{10,15}$/.test(value), "Enter a valid phone number with country code (e.g. +91... or +92...)");
 const optionalIndianPhoneSchema = z.union([z.literal(""), indianPhoneSchema]).optional()
   .transform((value) => value || undefined);
 const emailOrIndianPhoneSchema = z.string().trim().transform((value) => (
@@ -153,8 +153,8 @@ const emailOrIndianPhoneSchema = z.string().trim().transform((value) => (
 )).refine((value) => (
   value.includes("@")
     ? /^[^\s@]+@(?:[^\s@]+\.[^\s@]+|local)$/i.test(value)
-    : /^\+91[6-9]\d{9}$/.test(value)
-), "Enter a valid email address or Indian +91 mobile number");
+    : /^\+\d{10,15}$/.test(value)
+), "Enter a valid email address or international phone number");
 const isValidDateString = (value) => !Number.isNaN(Date.parse(String(value)));
 const requiredDateString = z.string().trim().min(1).pipe(z.string().refine(isValidDateString, "Invalid date"));
 const optionalDateString = z.union([z.literal(""), z.string().trim().refine(isValidDateString, "Invalid date")]).optional();
@@ -544,10 +544,25 @@ export const schemas = {
     body: z.object({
       branchId: z.string().nullable().optional(),
       name: z.string().min(2),
+      firmName: optionalString,
       phone: optionalIndianPhoneSchema,
+      alternateMobile: optionalIndianPhoneSchema,
       email: optionalEmailLike,
+      gstNumber: optionalString,
       address: optionalString,
-      notes: optionalString
+      area: optionalString,
+      landmark: optionalString,
+      city: optionalString,
+      pincode: optionalString,
+      notes: optionalString,
+      isActive: z.boolean().optional()
+    })
+  }),
+  vendorItem: z.object({
+    body: z.object({
+      productId: idSchema,
+      price: z.number().min(0),
+      isActive: z.boolean().optional()
     })
   }),
   purchaseOrder: z.object({
