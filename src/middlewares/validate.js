@@ -321,7 +321,7 @@ export const schemas = {
       skinNotes: optionalString
     })
   }),
-  serviceCategory: z.object({ body: z.object({ name: z.string().min(2) }) }),
+  serviceCategory: z.object({ body: z.object({ name: z.string().min(2), parentId: z.string().nullable().optional() }) }),
   ownerUser: z.object({
     body: z.object({
       name: z.string().min(2),
