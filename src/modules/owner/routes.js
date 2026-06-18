@@ -1211,7 +1211,8 @@ ownerRouter.get("/custom-roles", requireSalonPermission("staff", "view"), async 
 });
 ownerRouter.post("/custom-roles", requireSalonPermission("staff", "create"), attachSalonSettings, validate(schemas.customRole), async (req, res) => {
   const accessControl = req.advancedSettings?.accessControl || {};
-  if (accessControl.approvalRequiredForRoleEdits) {
+  const isOwner = req.user?.salonRole === "SALON_OWNER";
+  if (accessControl.approvalRequiredForRoleEdits && !isOwner) {
     const approvedBy = req.body.approvedBy || req.headers["x-approval-token"];
     if (!approvedBy) return res.status(403).json({ message: "Role creation requires approval. Provide approvedBy or x-approval-token header." });
   }
@@ -1228,7 +1229,8 @@ ownerRouter.post("/custom-roles", requireSalonPermission("staff", "create"), att
 });
 ownerRouter.patch("/custom-roles/:id", requireSalonPermission("staff", "edit"), attachSalonSettings, validate(schemas.customRole), async (req, res) => {
   const accessControl = req.advancedSettings?.accessControl || {};
-  if (accessControl.approvalRequiredForRoleEdits) {
+  const isOwner = req.user?.salonRole === "SALON_OWNER";
+  if (accessControl.approvalRequiredForRoleEdits && !isOwner) {
     const approvedBy = req.body.approvedBy || req.headers["x-approval-token"];
     if (!approvedBy) return res.status(403).json({ message: "Role edits require approval. Provide approvedBy or x-approval-token header." });
   }
