@@ -352,7 +352,7 @@ export const registerBillingRoutes = (ownerRouter) => {
                 name: String(rawItem?.serviceName || "Custom Membership"),
                 price: Math.max(0, toAmount(rawItem?.unitPrice || 0)),
                 validityDays: Number(rawItem?.validityDays || 30),
-                benefitType: "DISCOUNT_PERCENTAGE",
+                benefitType: "DISCOUNT_PERCENT",
                 discountValue: 0,
                 isPublicVisible: false,
                 isActive: true
@@ -369,19 +369,17 @@ export const registerBillingRoutes = (ownerRouter) => {
           sanitizedItems.push({
             id: rawItem?.id ? String(rawItem.id) : null,
             itemType: String(rawItem?.itemType || "SERVICE"),
-          serviceId: rawItem?.serviceId ? String(rawItem.serviceId) : null,
-          productId: rawItem?.productId ? String(rawItem.productId) : null,
-          membershipPlanId: rawItem?.membershipPlanId ? String(rawItem.membershipPlanId) : null,
-          packageId: rawItem?.packageId ? String(rawItem.packageId) : null,
           serviceName: String(rawItem?.serviceName || rawItem?.productName || "Item"),
-          staffUserSalonId,
           staffName,
-          batchNumber: rawItem?.batchNumber || null,
           qty,
           unitPrice,
           taxPct,
           lineTotal: inclusiveTax && taxPct > 0 ? lineBase : lineBase + lineTax,
-          tipAmount: Math.max(0, toAmount(rawItem?.tipAmount || 0))
+          ...(rawItem?.serviceId ? { serviceId: String(rawItem.serviceId) } : {}),
+          ...(rawItem?.productId ? { product: { connect: { id: String(rawItem.productId) } } } : {}),
+          ...(rawItem?.membershipPlanId ? { membershipPlan: { connect: { id: String(rawItem.membershipPlanId) } } } : {}),
+          ...(rawItem?.packageId ? { package: { connect: { id: String(rawItem.packageId) } } } : {}),
+          ...(staffUserSalonId ? { staffUserSalon: { connect: { id: staffUserSalonId } } } : {})
         });
       }
 
@@ -413,19 +411,12 @@ export const registerBillingRoutes = (ownerRouter) => {
         for (const item of sanitizedItems) {
           const payload = {
             itemType: item.itemType,
-            serviceId: item.serviceId,
-            productId: item.productId,
-            membershipPlanId: item.membershipPlanId,
-            packageId: item.packageId,
-            staffUserSalonId: item.staffUserSalonId,
             serviceName: item.serviceName,
             staffName: item.staffName,
-            batchNumber: item.batchNumber || null,
             qty: item.qty,
             unitPrice: item.unitPrice,
             taxPct: item.taxPct,
-            lineTotal: item.lineTotal,
-            tipAmount: item.tipAmount
+            lineTotal: item.lineTotal
           };
 
           if (item.id) {

@@ -26,8 +26,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
         ...(q ? {
           OR: [
             { title: { contains: q, mode: "insensitive" } },
-            { notes: { contains: q, mode: "insensitive" } },
-            { paymentMode: { contains: q, mode: "insensitive" } }
+            { notes: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },

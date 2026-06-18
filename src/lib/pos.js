@@ -226,7 +226,6 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
         staffUserSalonId: null,
         serviceName: product.name,
         staffName: item.staffName || null,
-        batchNumber: item.batchNumber || null,
         qty,
         unitPrice,
         taxPct,
@@ -247,7 +246,7 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
             name: item.serviceName || "Custom Membership",
             price: toAmount(item.unitPrice),
             validityDays: Number(item.validityDays || 30),
-            benefitType: "DISCOUNT_PERCENTAGE",
+            benefitType: "DISCOUNT_PERCENT",
             discountValue: 0,
             isPublicVisible: false,
             isActive: true
