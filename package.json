@@ -4,10 +4,10 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "postinstall": "npx prisma generate && npx prisma db push --accept-data-loss",
+    "postinstall": "npx prisma generate",
     "dev": "nodemon src/server.js",
-    "build": "npx prisma generate && npx prisma db push",
-    "start": "node src/server.js",
+    "build": "npx prisma generate",
+    "start": "npx prisma db push --accept-data-loss && node src/server.js",
     "healthcheck": "node scripts/healthcheck.mjs",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
