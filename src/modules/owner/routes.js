@@ -6,9 +6,6 @@ import { createAuditLog } from "../../lib/phase4.js";
 import { patchRouterForAsync } from "../../lib/async-handler.js";
 import { requireAuth, requireMaintenanceAccess, requireSalonContext, requireSalonPermission } from "../../middlewares/rbac.js";
 import { schemas, validate } from "../../middlewares/validate.js";
-import { registerPhase2OwnerRoutes } from "./phase2/index.js";
-import { registerPhase3OwnerRoutes } from "./phase3/index.js";
-import { registerPhase4OwnerRoutes } from "./phase4/index.js";
 
 export const ownerRouter = Router();
 patchRouterForAsync(ownerRouter);
@@ -668,6 +665,145 @@ ownerRouter.post("/settings", requireSalonPermission("settings", "edit"), valida
   });
   res.status(201).json(row);
 });
+
+ownerRouter.get("/website/config", requireSalonPermission("settings", "view"), async (req, res) => {
+  let config = await prisma.websiteConfig.findUnique({
+    where: { salonId: req.salonId }
+  });
+  if (!config) {
+    config = { heroTitle: "", heroSubtitle: "", heroImage: "" };
+  }
+  res.json(config);
+});
+
+ownerRouter.post("/website/config", requireSalonPermission("settings", "edit"), async (req, res) => {
+  const { heroTitle, heroSubtitle, heroImage } = req.body;
+  const config = await prisma.websiteConfig.upsert({
+    where: { salonId: req.salonId },
+    update: { heroTitle, heroSubtitle, heroImage },
+    create: { salonId: req.salonId, heroTitle, heroSubtitle, heroImage }
+  });
+  res.json(config);
+});
+
+ownerRouter.get("/reports/trends", requireSalonPermission("reports", "view"), async (req, res) => {
+  const range = req.query.range || "7D";
+
+  let days = 7;
+  if (range === "1D")  days = 1;
+  if (range === "14D") days = 14;
+  if (range === "1M")  days = 30;
+  if (range === "2M")  days = 60;
+  if (range === "YTD") days = Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 86400000) || 1;
+  if (range === "1Y")  days = 365;
+
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  startDate.setHours(0,0,0,0);
+
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      salonId: req.salonId,
+      status: "PAID",
+      createdAt: { gte: startDate }
+    },
+    include: {
+      items: true
+    }
+  });
+
+  let serviceRev = 0, productRev = 0, packageRev = 0, membershipRev = 0;
+
+  invoices.forEach(inv => {
+    inv.items.forEach(item => {
+      const type  = item.itemType || "SERVICE";  // fixed: itemType not type
+      const total = Number(item.lineTotal || 0); // fixed: lineTotal not total
+      if (type === "SERVICE")    serviceRev    += total;
+      if (type === "PRODUCT")    productRev    += total;
+      if (type === "PACKAGE")    packageRev    += total;
+      if (type === "MEMBERSHIP") membershipRev += total;
+    });
+  });
+
+  const totalRev = serviceRev + productRev + packageRev + membershipRev;
+
+  const revenueSplit = [
+    { name: "Total", value: totalRev, fill: "#6366f1" },
+    { name: "Service", value: serviceRev, fill: "#3b82f6" },
+    { name: "Product", value: productRev, fill: "#10b981" },
+    { name: "Package", value: packageRev, fill: "#f59e0b" },
+    { name: "Membership", value: membershipRev, fill: "#ec4899" },
+    { name: "Gift Card", value: 0, fill: "#8b5cf6" }
+  ];
+
+  // daily trend line
+  const dateMap = {};
+  const totalDays = Math.max(days, 1);
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - (totalDays - 1 - i));
+    const dateStr = d.toISOString().slice(0, 10);
+    dateMap[dateStr] = { date: dateStr, total: 0, service: 0, product: 0, package: 0, membership: 0 };
+  }
+
+  invoices.forEach(inv => {
+    const dStr = inv.createdAt.toISOString().slice(0, 10);
+    if (dateMap[dStr]) {
+      inv.items.forEach(item => {
+        const type = item.itemType || "SERVICE";
+        const t    = Number(item.lineTotal || 0);
+        dateMap[dStr].total += t;
+        if (type === "SERVICE")    dateMap[dStr].service    += t;
+        if (type === "PRODUCT")    dateMap[dStr].product    += t;
+        if (type === "PACKAGE")    dateMap[dStr].package    += t;
+        if (type === "MEMBERSHIP") dateMap[dStr].membership += t;
+      });
+    }
+  });
+
+  // top services
+  const serviceMap = {};
+  invoices.forEach(inv => {
+    inv.items.filter(i => (i.itemType || "SERVICE") === "SERVICE").forEach(item => {
+      const name = item.serviceName || "Unknown";
+      serviceMap[name] = (serviceMap[name] || 0) + Number(item.lineTotal || 0);
+    });
+  });
+  const topServices = Object.entries(serviceMap)
+    .map(([name, revenue]) => ({ name, revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  // top staff
+  const staffMap = {};
+  invoices.forEach(inv => {
+    inv.items.forEach(item => {
+      if (!item.staffName) return;
+      staffMap[item.staffName] = (staffMap[item.staffName] || 0) + Number(item.lineTotal || 0);
+    });
+  });
+  const topStaff = Object.entries(staffMap)
+    .map(([name, revenue]) => ({ name, revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  res.json({
+    revenueSplit,
+    trendLine:   Object.values(dateMap),
+    topServices,
+    topStaff,
+    summary: {
+      totalInvoices: invoices.length,
+      totalRevenue:  totalRev,
+      avgBillValue:  invoices.length ? Math.round(totalRev / invoices.length) : 0,
+    }
+  });
+});
+
+
+
+
+
 
 registerPhase2OwnerRoutes(ownerRouter);
 registerPhase3OwnerRoutes(ownerRouter);
