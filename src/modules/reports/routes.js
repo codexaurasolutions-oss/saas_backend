@@ -156,16 +156,17 @@ reportsRouter.get("/product-sales", async (req, res) => {
       invoice: { is: buildInvoiceWhere(req, branchId) },
       ...(isOwnScopedStaff(req, "reports") ? { staffUserSalonId: req.user.membershipId } : {})
     },
-    include: { product: true, invoice: true }
+    include: { product: { include: { category: true } }, invoice: true }
   });
   const grouped = {};
   rows.forEach((row) => {
     const key = row.productId || row.serviceName;
-    if (!grouped[key]) grouped[key] = { productId: row.productId, name: row.product?.name || row.serviceName, qty: 0, sales: 0 };
+    if (!grouped[key]) grouped[key] = { productId: row.productId, "Product": row.product?.name || row.serviceName, "Category": row.product?.category?.name || "-", qty: 0, sales: 0 };
     grouped[key].qty += Number(row.qty || 0);
     grouped[key].sales += toAmount(row.lineTotal);
   });
-  res.json(Object.values(grouped).sort((a, b) => b.sales - a.sales));
+  const result = Object.values(grouped).sort((a, b) => b.sales - a.sales);
+  res.json(result.map(r => ({ ...r, "Qty": r.qty, "Sales": r.sales })));
 });
 
 reportsRouter.get("/service-sales", async (req, res) => {
@@ -175,16 +176,46 @@ reportsRouter.get("/service-sales", async (req, res) => {
       itemType: "SERVICE",
       invoice: { is: buildInvoiceWhere(req, branchId) },
       ...(isOwnScopedStaff(req, "reports") ? { staffUserSalonId: req.user.membershipId } : {})
-    }
+    },
+    include: { invoice: { include: { customer: true, payments: true } }, staffUserSalon: { include: { user: true } } }
   });
-  const grouped = {};
-  rows.forEach((row) => {
-    const key = row.serviceId || row.serviceName;
-    if (!grouped[key]) grouped[key] = { serviceId: row.serviceId, name: row.serviceName, qty: 0, sales: 0 };
-    grouped[key].qty += Number(row.qty || 0);
-    grouped[key].sales += toAmount(row.lineTotal);
-  });
-  res.json(Object.values(grouped).sort((a, b) => b.sales - a.sales));
+
+  const serviceIds = [...new Set(rows.map(r => r.serviceId).filter(Boolean))];
+  const services = serviceIds.length > 0 ? await prisma.service.findMany({ where: { id: { in: serviceIds } }, include: { category: true } }) : [];
+  const serviceMap = {};
+  services.forEach(s => { serviceMap[s.id] = s; });
+
+  res.json(rows.map((row, idx) => {
+    const inv = row.invoice;
+    const svc = serviceMap[row.serviceId];
+    const dateObj = new Date(inv?.createdAt || Date.now());
+    const paymentModes = inv?.payments?.map(p => p.mode).filter(Boolean).join(", ") || "";
+    const taxAmt = toAmount(inv?.tax) || (toAmount(row.unitPrice) * toAmount(row.taxPct) / 100);
+    const isComplimentary = toAmount(inv?.total) === 0;
+
+    return {
+      "SR. NO.": idx + 1,
+      "DATE": dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-"),
+      "TIME": dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+      "GUEST NAME": inv?.customer?.name || "Walk-in",
+      "GUEST NUMBER": inv?.customer?.phone || "-",
+      "STAFF": row.staffUserSalon?.user?.name || row.staffName || "-",
+      "INVOICE NO": inv?.invoiceNumber || "-",
+      "SERVICE": svc?.name || row.serviceName || "-",
+      "CATEGORY": svc?.category?.name || "-",
+      "DURATION": svc?.durationMin || "-",
+      "QTY": Number(row.qty || 0),
+      "UNIT PRICE": toAmount(row.unitPrice),
+      "DISCOUNT": 0,
+      "COMPLIMENTARY": isComplimentary ? toAmount(row.lineTotal) : 0,
+      "REDEMPTION AMOUNT": toAmount(row.membershipWalletUsed) + toAmount(row.packageSessionsUsed),
+      "REDEMPTION SOURCES": [row.membershipWalletUsed ? "Membership" : "", row.packageSessionsUsed ? "Package" : ""].filter(Boolean).join(", ") || "-",
+      "TAX": taxAmt,
+      "SUBTOTAL": toAmount(row.lineTotal) - taxAmt,
+      "TOTAL": toAmount(row.lineTotal),
+      "PAYMENT MODE": paymentModes
+    };
+  }));
 });
 
 reportsRouter.get("/memberships", async (req, res) => {
@@ -243,7 +274,7 @@ reportsRouter.get("/low-stock", async (req, res) => {
 });
 
 reportsRouter.get("/customers", async (req, res) => {
-  res.json(await prisma.customer.findMany({
+  const customers = await prisma.customer.findMany({
     where: isOwnScopedStaff(req, "reports")
       ? {
           salonId: req.salonId,
@@ -254,12 +285,78 @@ reportsRouter.get("/customers", async (req, res) => {
         }
       : { salonId: req.salonId },
     include: {
-      memberships: { include: { membershipPlan: true } },
-      packages: { include: { package: true } },
-      appointments: true,
-      invoices: true
+      invoices: { include: { payments: true, items: true } },
+      memberships: { include: { membershipPlan: true, usageLogs: true } },
+      packages: { include: { package: true, usageLogs: true } }
     },
     orderBy: { totalSpend: "desc" }
+  });
+
+  const giftCardRedemptions = await prisma.giftCardRedemption.findMany({
+    where: { salonId: req.salonId },
+    include: { giftCard: true }
+  });
+  const couponRedemptions = await prisma.couponRedemption.findMany({
+    where: { coupon: { salonId: req.salonId } }
+  });
+  const loyaltyTxns = await prisma.loyaltyTransaction.findMany({
+    where: { salonId: req.salonId }
+  });
+
+  const gcByCustomer = {};
+  giftCardRedemptions.forEach(r => {
+    if (!gcByCustomer[r.customerId]) gcByCustomer[r.customerId] = 0;
+    gcByCustomer[r.customerId] += toAmount(r.amountUsed);
+  });
+  const cpByCustomer = {};
+  couponRedemptions.forEach(r => {
+    if (!cpByCustomer[r.customerId]) cpByCustomer[r.customerId] = 0;
+    cpByCustomer[r.customerId] += toAmount(r.amountSaved);
+  });
+  const loyByCustomer = {};
+  loyaltyTxns.forEach(r => {
+    if (!loyByCustomer[r.customerId]) loyByCustomer[r.customerId] = 0;
+    loyByCustomer[r.customerId] += toAmount(r.points);
+  });
+
+  res.json(customers.map((c, idx) => {
+    let totalTax = 0, balancePending = 0, advanceUtilized = 0, balanceCleared = 0, onlineTotal = 0, offlineTotal = 0;
+    c.invoices.forEach(inv => {
+      totalTax += toAmount(inv.tax);
+      balancePending += Math.max(0, toAmount(inv.total) - toAmount(inv.paidAmount) - toAmount(inv.refundAmount));
+      inv.payments.forEach(p => {
+        const amt = toAmount(p.amount);
+        if (p.mode === "ONLINE") onlineTotal += amt;
+        else offlineTotal += amt;
+        if (p.type === "ADVANCE") advanceUtilized += amt;
+        if (p.type === "BALANCE") balanceCleared += amt;
+      });
+    });
+
+    let pkgRedemption = 0;
+    c.packages.forEach(pkg => { pkg.usageLogs.forEach(l => { pkgRedemption += toAmount(l.sessionsUsed); }); });
+    let memRedemption = 0;
+    c.memberships.forEach(mem => { mem.usageLogs.forEach(l => { memRedemption += toAmount(l.amountUsed); }); });
+
+    return {
+      "SR. NO.": idx + 1,
+      "GUEST NAME": c.name,
+      "GUEST NUMBER": c.phone,
+      "COUNT": c.invoices.length,
+      "TAXES": totalTax,
+      "GIFT CARD": gcByCustomer[c.id] || 0,
+      "COUPON": cpByCustomer[c.id] || 0,
+      "REFERRAL": 0,
+      "LOYALTY": loyByCustomer[c.id] || 0,
+      "BALANCE PENDING": balancePending,
+      "ADVANCE UTILIZED": advanceUtilized,
+      "PACKAGE REDEMPTION": pkgRedemption,
+      "BALANCE CLEARED": balanceCleared,
+      "MEMBERSHIP REDEMPTION": memRedemption,
+      "ONLINE": onlineTotal,
+      "OFFLINE": offlineTotal,
+      "TOTAL": toAmount(c.totalSpend)
+    };
   }));
 });
 

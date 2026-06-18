@@ -16,16 +16,28 @@ const buildDateFilter = (req, field = "createdAt") => {
   reportsRouter.get("/service-reminder", async (req, res) => {
     const customers = await prisma.customer.findMany({
       where: { salonId: req.salonId, lastVisitAt: { not: null } },
+      include: {
+        appointments: {
+          where: { status: { in: ["COMPLETED", "CONFIRMED"] } },
+          include: { items: { include: { service: true } } },
+          orderBy: { startAt: "desc" },
+          take: 1
+        }
+      },
       orderBy: { lastVisitAt: "asc" }
     });
-    res.json(customers.map(c => ({
-      customer: c.name,
-      phone: c.phone,
-      lastService: c.lastVisitAt,
-      service: "General Reminder",
-      dueDate: new Date(new Date(c.lastVisitAt).getTime() + 30*24*60*60*1000),
-      status: "Due"
-    })));
+    res.json(customers.map(c => {
+      const lastAppt = c.appointments?.[0];
+      const lastSvc = lastAppt?.items?.[0]?.service?.name || lastAppt?.items?.[0]?.serviceName || "General";
+      return {
+        "Customer": c.name,
+        "Phone": c.phone,
+        "Last Service": c.lastVisitAt ? new Date(c.lastVisitAt).toLocaleDateString() : "-",
+        "Service": lastSvc,
+        "Due Date": c.lastVisitAt ? new Date(new Date(c.lastVisitAt).getTime() + 30*24*60*60*1000).toLocaleDateString() : "-",
+        "Status": "Due"
+      };
+    }));
   });
 
   reportsRouter.get("/monthly-sale", async (req, res) => {
@@ -240,11 +252,11 @@ const buildDateFilter = (req, field = "createdAt") => {
       orderBy: { createdAt: "desc" }
     });
     res.json(enquiries.map(e => ({
-      customer: e.name,
-      phone: e.phone,
-      lastVisit: new Date(e.createdAt).toLocaleDateString(),
-      daysSince: Math.floor((new Date() - new Date(e.createdAt)) / (1000 * 60 * 60 * 24)),
-      followUpStatus: e.status
+      "Customer": e.name,
+      "Phone": e.phone,
+      "Last Visit": new Date(e.createdAt).toLocaleDateString(),
+      "Days Since": Math.floor((new Date() - new Date(e.createdAt)) / (1000 * 60 * 60 * 24)),
+      "Follow-up Status": e.status
     })));
   });
 
@@ -315,23 +327,32 @@ const buildDateFilter = (req, field = "createdAt") => {
     const branchId = normalizeBranchId(req.query.branchId);
     const invoices = await prisma.invoice.findMany({
       where: buildInvoiceWhere(req, branchId),
-      include: { customer: true, items: true },
+      include: { customer: true, items: true, branch: true },
       orderBy: { createdAt: "desc" }
     });
-    res.json(invoices.map(inv => {
+
+    const serviceIds = [...new Set(invoices.flatMap(inv => inv.items.map(i => i.serviceId).filter(Boolean)))];
+    const services = serviceIds.length > 0 ? await prisma.service.findMany({ where: { id: { in: serviceIds } } }) : [];
+    const svcMap = {};
+    services.forEach(s => { svcMap[s.id] = s; });
+
+    res.json(invoices.map((inv, idx) => {
       const totalQty = inv.items.reduce((sum, it) => sum + (it.qty || 0), 0);
       const taxableAmount = toAmount(inv.subtotal) - toAmount(inv.discount);
+      const hsnCodes = [...new Set(inv.items.map(i => svcMap[i.serviceId]?.name || i.serviceName).filter(Boolean))].join(", ") || "-";
       return {
+        "SR. NO.": idx + 1,
         "INVOICE DATE": new Date(inv.createdAt).toISOString().slice(0, 10),
         "INVOICE NO": inv.invoiceNumber,
         "GUEST NAME": inv.customer?.name || "Walk-in",
-        "GUEST GSTN": "NA",
-        "HSN/SAC": "-",
+        "GUEST GSTN": inv.customer?.email || "NA",
+        "HSN/SAC": hsnCodes,
         "AMOUNT": toAmount(inv.subtotal),
         "QTY": totalQty,
         "DISCOUNT": toAmount(inv.discount),
         "TAXABLE AMOUNT": taxableAmount,
-        "INVOICE AMOUNT": toAmount(inv.total)
+        "INVOICE AMOUNT": toAmount(inv.total),
+        "BRANCH": inv.branch?.name || "-"
       };
     }));
   });
@@ -343,15 +364,26 @@ const buildDateFilter = (req, field = "createdAt") => {
       include: { customer: true, items: true },
       orderBy: { createdAt: "desc" }
     });
-    res.json(invoices.map(inv => ({
-      invoiceNumber: inv.invoiceNumber,
-      date: new Date(inv.createdAt).toLocaleDateString(),
-      customer: inv.customer?.name || "Walk-in",
-      taxableAmt: toAmount(inv.subtotal),
-      taxRate: inv.items[0]?.taxPct ? `${toAmount(inv.items[0].taxPct)}%` : "0%",
-      taxAmt: toAmount(inv.tax),
-      total: toAmount(inv.total)
-    })));
+
+    const serviceIds = [...new Set(invoices.flatMap(inv => inv.items.map(i => i.serviceId).filter(Boolean)))];
+    const services = serviceIds.length > 0 ? await prisma.service.findMany({ where: { id: { in: serviceIds } } }) : [];
+    const svcMap = {};
+    services.forEach(s => { svcMap[s.id] = s; });
+
+    res.json(invoices.map(inv => {
+      const totalTaxPct = inv.items.reduce((sum, i) => sum + toAmount(i.taxPct), 0) / (inv.items.length || 1);
+      const hsnCodes = [...new Set(inv.items.map(i => svcMap[i.serviceId]?.name || i.serviceName).filter(Boolean))].join(", ") || "-";
+      return {
+        "Invoice #": inv.invoiceNumber,
+        "Date": new Date(inv.createdAt).toLocaleDateString(),
+        "Customer": inv.customer?.name || "Walk-in",
+        "HSN/SAC": hsnCodes,
+        "Taxable Amt": toAmount(inv.subtotal) - toAmount(inv.discount),
+        "Tax Rate": totalTaxPct > 0 ? `${totalTaxPct.toFixed(1)}%` : "0%",
+        "Tax Amt": toAmount(inv.tax),
+        "Total": toAmount(inv.total)
+      };
+    }));
   });
 
   reportsRouter.get("/material-received", async (req, res) => {
@@ -361,13 +393,13 @@ const buildDateFilter = (req, field = "createdAt") => {
       orderBy: { createdAt: "desc" }
     });
     res.json(movs.map(m => ({
-      date: new Date(m.createdAt).toLocaleDateString(),
-      product: m.product?.name,
-      vendor: "Supplier",
-      qty: toAmount(m.quantity),
-      unitCost: 0,
-      totalCost: 0,
-      poNumber: m.referenceId || "-"
+      "Date": new Date(m.createdAt).toLocaleDateString(),
+      "Product": m.product?.name || "-",
+      "Vendor": "Supplier",
+      "Qty": toAmount(m.quantity),
+      "Unit Cost": 0,
+      "Total Cost": 0,
+      "PO #": m.referenceId || "-"
     })));
   });
 
@@ -377,12 +409,12 @@ const buildDateFilter = (req, field = "createdAt") => {
       orderBy: { createdAt: "desc" }
     });
     res.json(recons.map(r => ({
-      product: "Various",
-      systemStock: "-",
-      physicalCount: "-",
-      variance: "-",
-      date: new Date(r.createdAt).toLocaleDateString(),
-      staff: "Manager"
+      "Product": "Various",
+      "System Stock": "-",
+      "Physical Count": "-",
+      "Variance": "-",
+      "Date": new Date(r.createdAt).toLocaleDateString(),
+      "Staff": "Manager"
     })));
   });
 
