@@ -196,6 +196,57 @@ export const registerPromotionRoutes = (ownerRouter) => {
     res.json(row);
   });
 
+  ownerRouter.patch("/gift-cards/:id", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "edit"), async (req, res) => {
+    const row = await prisma.giftCard.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    if (!row) return res.status(404).json({ message: "Gift card not found" });
+    const updated = await prisma.giftCard.update({
+      where: { id: row.id },
+      data: {
+        code: req.body.code ?? row.code,
+        title: req.body.title ?? row.title,
+        originalAmount: req.body.originalAmount != null ? Number(req.body.originalAmount) : row.originalAmount,
+        balanceAmount: req.body.balanceAmount != null ? Number(req.body.balanceAmount) : row.balanceAmount,
+        expiresAt: req.body.expiresAt != null ? (req.body.expiresAt ? new Date(req.body.expiresAt) : null) : row.expiresAt,
+        isActive: req.body.isActive ?? row.isActive,
+        note: req.body.note != null ? req.body.note : row.note
+      }
+    });
+    await createAuditLog({
+      salonId: req.salonId,
+      actorUserId: req.user.userId,
+      actorMembershipId: req.user.membershipId,
+      module: "GIFT_CARDS",
+      action: "GIFT_CARD_UPDATED",
+      entityType: "GiftCard",
+      entityId: updated.id,
+      reference: updated.code,
+      summary: `Gift card ${updated.code} updated`
+    });
+    res.json(updated);
+  });
+
+  ownerRouter.delete("/gift-cards/:id", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "edit"), async (req, res) => {
+    const row = await prisma.giftCard.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    if (!row) return res.status(404).json({ message: "Gift card not found" });
+    const hasRedemptions = await prisma.giftCardRedemption.count({ where: { giftCardId: row.id } });
+    if (hasRedemptions > 0) {
+      return res.status(400).json({ message: "Cannot delete a gift card that has been redeemed. Deactivate it instead." });
+    }
+    await prisma.giftCard.delete({ where: { id: row.id } });
+    await createAuditLog({
+      salonId: req.salonId,
+      actorUserId: req.user.userId,
+      actorMembershipId: req.user.membershipId,
+      module: "GIFT_CARDS",
+      action: "GIFT_CARD_DELETED",
+      entityType: "GiftCard",
+      entityId: row.id,
+      reference: row.code,
+      summary: `Gift card ${row.code} deleted`
+    });
+    res.json({ message: "Gift card deleted" });
+  });
+
   ownerRouter.post("/gift-cards/redeem", requireFeatureEnabled("couponsGiftCards"), requireSalonPermission("couponsGiftCards", "edit"), validate(schemas.giftCardRedeem), async (req, res) => {
     const giftCardSettings = await getProgramSettings(req.salonId, "giftCardSettings", { enabled: true });
     ensureProgramEnabled(giftCardSettings, "Gift cards");

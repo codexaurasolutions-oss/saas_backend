@@ -317,6 +317,26 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
         commissionAmount: 0
       });
     }
+
+    if (itemType === "GIFT_CARD") {
+      const gcAmount = toAmount(item.unitPrice);
+      const validityDays = Number(item.validityDays || 365);
+      const qty = Number(item.qty || 1);
+      const taxPct = toAmount(item.taxPct || 0);
+      const preTax = gcAmount * qty;
+      itemDrafts.push({
+        itemType,
+        serviceName: item.serviceName || "Gift Card",
+        staffName: item.staffName || null,
+        qty,
+        unitPrice: gcAmount,
+        taxPct,
+        lineTotal: preTax + (preTax * taxPct) / 100,
+        commissionAmount: 0,
+        validityDays,
+        gcCode: item.gcCode || null
+      });
+    }
   }
 
   const soldMembershipCount = itemDrafts.filter((item) => item.itemType === "MEMBERSHIP").length;
@@ -589,6 +609,30 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
             startsAt,
             endsAt,
             remainingSessions: Number(pack.totalSessions)
+          }
+        });
+      }
+
+      if (item.itemType === "GIFT_CARD") {
+        const gcAmount = toAmount(item.unitPrice);
+        const validityDays = Number(item.validityDays || 365);
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + validityDays);
+        const gcCode = item.gcCode || `GC-${Date.now().toString(36).toUpperCase()}`;
+        const gcTitle = item.serviceName || "Gift Card";
+        await tx.giftCard.create({
+          data: {
+            salonId,
+            issuedToCustomerId: body.customerId || null,
+            soldInvoiceId: invoice.id,
+            createdByMembershipId: actorUser.membershipId || null,
+            code: gcCode,
+            title: gcTitle,
+            originalAmount: gcAmount,
+            balanceAmount: gcAmount,
+            expiresAt,
+            isActive: true,
+            note: item.note || null
           }
         });
       }
