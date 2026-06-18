@@ -19,7 +19,7 @@ export const registerBillingRoutes = (ownerRouter) => {
     const [customers, branches, services, staffUsers, products, memberships, packages, customerPackages, coupons, giftCards, settings] = await Promise.all([
       prisma.customer.findMany({ where: { salonId: req.salonId }, orderBy: { createdAt: "desc" } }),
       prisma.branch.findMany({ where: { salonId: req.salonId, isActive: true }, orderBy: { createdAt: "desc" } }),
-      prisma.service.findMany({ where: { salonId: req.salonId, isActive: true, ...params }, orderBy: { createdAt: "desc" } }),
+      prisma.service.findMany({ where: { salonId: req.salonId, isActive: true, ...params }, include: { category: true }, orderBy: { createdAt: "desc" } }),
       prisma.userSalon.findMany({
         where: { salonId: req.salonId, isArchived: false, ...params },
         include: { user: true, branch: true, serviceAssignments: true }
