@@ -558,6 +558,7 @@ export const schemas = {
       isActive: z.boolean().optional()
     })
   }),
+  vendorItem: z.object({
     body: z.object({
       productId: idSchema,
       price: z.number().min(0),
