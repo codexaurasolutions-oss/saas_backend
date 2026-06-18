@@ -843,6 +843,7 @@ model Product {
   orderItems         OnlineOrderItem[]
   coupons            Coupon[]
   packages           PackageProduct[]
+  vendorItems        VendorItem[]
 
   @@unique([salonId, sku])
 }
