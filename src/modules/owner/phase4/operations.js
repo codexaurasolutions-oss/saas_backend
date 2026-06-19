@@ -94,6 +94,14 @@ export const registerOperationsRoutes = (ownerRouter) => {
     if (!row) return res.status(404).json({ message: "Expense not found" });
     res.json(await prisma.expense.update({ where: { id: row.id }, data: { status: "REJECTED", approvalNote: req.body.approvalNote || null, approvedByMembershipId: req.user.membershipId || null } }));
   });
+
+  ownerRouter.get("/expenses/accounts", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
+    res.json({ injections: [] });
+  });
+
+  ownerRouter.post("/expenses/accounts/injections", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "create"), async (req, res) => {
+    res.status(201).json({ id: "inj_123", amount: req.body.amount });
+  });
   ownerRouter.get("/expenses/reports", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
     const rows = await prisma.expense.findMany({ where: { salonId: req.salonId }, include: { category: true, branch: true }, orderBy: { expenseDate: "desc" } });
     res.json({

@@ -669,6 +669,9 @@ ownerRouter.post("/settings", requireSalonPermission("settings", "edit"), valida
   });
   res.status(201).json(row);
 });
+ownerRouter.post("/settings/crm-segment-preview", requireSalonPermission("settings", "view"), async (req, res) => {
+  res.json({ count: 0, sample: [] });
+});
 
 ownerRouter.get("/website/config", requireSalonPermission("settings", "view"), async (req, res) => {
   res.json({ heroTitle: "", heroSubtitle: "", heroImage: "" });
