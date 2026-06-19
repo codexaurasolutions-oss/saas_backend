@@ -957,6 +957,49 @@ export const registerBillingRoutes = (ownerRouter) => {
     pdf.end();
   });
 
+  // ── Advance Payments ──────────────────────────────────────────────────
+  ownerRouter.get("/customers/:id/advance-payments", requireSalonPermission("customers", "view"), async (req, res) => {
+    const customer = await prisma.customer.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const entries = await prisma.customerTimeline.findMany({
+      where: { customerId: req.params.id, eventType: "ADVANCE_PAYMENT" },
+      orderBy: { createdAt: "desc" }
+    });
+    res.json(entries);
+  });
+
+  ownerRouter.post("/advance-payments", requireSalonPermission("customers", "edit"), async (req, res) => {
+    const { customerId, amount, mode, remark } = req.body;
+    if (!customerId || !amount || Number(amount) <= 0) {
+      return res.status(400).json({ message: "Customer and a positive amount are required" });
+    }
+    const customer = await prisma.customer.findFirst({ where: { id: customerId, salonId: req.salonId } });
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+
+    const entry = await prisma.customerTimeline.create({
+      data: {
+        customerId,
+        eventType: "ADVANCE_PAYMENT",
+        title: `Advance payment of ${Number(amount).toFixed(2)} (${mode || "Offline"})`,
+        details: JSON.stringify({ amount: Number(amount), mode: mode || "Offline", remark: remark || "" }),
+        referenceId: null
+      }
+    });
+    res.status(201).json(entry);
+  });
+
+  ownerRouter.get("/advance-payments", requireSalonPermission("customers", "view"), async (req, res) => {
+    const customerIds = await prisma.customer.findMany({
+      where: { salonId: req.salonId },
+      select: { id: true }
+    });
+    const ids = customerIds.map(c => c.id);
+    const entries = await prisma.customerTimeline.findMany({
+      where: { customerId: { in: ids }, eventType: "ADVANCE_PAYMENT" },
+      orderBy: { createdAt: "desc" }
+    });
+    res.json(entries);
+  });
 
 };
 
