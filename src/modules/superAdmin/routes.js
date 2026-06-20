@@ -158,12 +158,12 @@ superAdminRouter.get("/salons", asyncHandler(async (req, res) => {
         ...(status ? { status } : {}),
         ...(q ? {
           OR: [
-            { name: { contains: q } },
-            { slug: { contains: q } },
-            { email: { contains: q } },
-            { phone: { contains: q } },
-            { city: { contains: q } },
-            { country: { contains: q } }
+            { name: { contains: q, mode: "insensitive" } },
+            { slug: { contains: q, mode: "insensitive" } },
+            { email: { contains: q, mode: "insensitive" } },
+            { phone: { contains: q, mode: "insensitive" } },
+            { city: { contains: q, mode: "insensitive" } },
+            { country: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },
@@ -327,9 +327,9 @@ superAdminRouter.get("/subscriptions", asyncHandler(async (req, res) => {
       ...(paymentStatus ? { paymentStatus } : {}),
       ...(q ? {
         OR: [
-          { salon: { is: { name: { contains: q } } } },
-          { plan: { is: { name: { contains: q } } } },
-          { notes: { contains: q } }
+          { salon: { is: { name: { contains: q, mode: "insensitive" } } } },
+          { plan: { is: { name: { contains: q, mode: "insensitive" } } } },
+          { notes: { contains: q, mode: "insensitive" } }
         ]
       } : {})
     },
@@ -430,10 +430,10 @@ superAdminRouter.get("/demo-leads", asyncHandler(async (req, res) => {
         ...(status ? { status } : {}),
         ...(q ? {
           OR: [
-            { name: { contains: q } },
-            { email: { contains: q } },
-            { phone: { contains: q } },
-            { message: { contains: q } }
+            { name: { contains: q, mode: "insensitive" } },
+            { email: { contains: q, mode: "insensitive" } },
+            { phone: { contains: q, mode: "insensitive" } },
+            { message: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },
@@ -496,10 +496,10 @@ superAdminRouter.get("/support-tickets", asyncHandler(async (req, res) => {
       ...(priority ? { priority } : {}),
       ...(q ? {
         OR: [
-          { title: { contains: q } },
-          { description: { contains: q } },
-          { category: { contains: q } },
-          { salon: { is: { name: { contains: q } } } }
+          { title: { contains: q, mode: "insensitive" } },
+          { description: { contains: q, mode: "insensitive" } },
+          { category: { contains: q, mode: "insensitive" } },
+          { salon: { is: { name: { contains: q, mode: "insensitive" } } } }
         ]
       } : {})
     },

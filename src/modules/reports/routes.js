@@ -69,6 +69,43 @@ reportsRouter.get("/sales-summary", async (req, res) => {
   res.json({ count: invoices.length, totalSales, totalPaid, totalDue, byStatus, byBranch });
 });
 
+reportsRouter.get("/sales-summary-list", async (req, res) => {
+  const branchId = normalizeBranchId(req.query.branchId);
+  const invoices = await prisma.invoice.findMany({
+    where: buildInvoiceWhere(req, branchId),
+    include: { customer: true, branch: true, payments: true, items: true },
+    orderBy: { createdAt: "desc" }
+  });
+
+  res.json(
+    invoices.map((invoice, idx) => {
+      const dateObj = new Date(invoice.createdAt);
+      const total = toAmount(invoice.total);
+      const paid = toAmount(invoice.paidAmount);
+      const refunded = toAmount(invoice.refundAmount);
+      const due = Math.max(0, total - paid - refunded);
+      const paymentModes = invoice.payments?.map((payment) => payment.mode).filter(Boolean).join(", ") || "-";
+
+      return {
+        "SR. NO.": idx + 1,
+        "DATE": dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-"),
+        "TIME": dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+        "INVOICE NO": invoice.invoiceNumber || "-",
+        "GUEST NAME": invoice.customer?.name || "Walk-in",
+        "GUEST NUMBER": invoice.customer?.phone || "-",
+        "ITEMS": Array.isArray(invoice.items) ? invoice.items.length : 0,
+        "GROSS AMOUNT": total,
+        "DISCOUNT": toAmount(invoice.discount),
+        "TAX": toAmount(invoice.tax),
+        "NET TOTAL": total,
+        "PAID AMOUNT": paid,
+        "DUE AMOUNT": due,
+        "PAYMENT MODE": paymentModes
+      };
+    })
+  );
+});
+
 reportsRouter.get("/payment-modes", async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);
   const payments = await prisma.payment.findMany({

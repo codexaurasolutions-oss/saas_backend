@@ -50,6 +50,9 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
   const legalContent = typeof salonSettings?.advancedSettings === "object"
     ? salonSettings.advancedSettings?.legalContent || {}
     : {};
+  const websiteConfig = typeof salon.featureFlags === "object" && salon.featureFlags?.websiteConfig && typeof salon.featureFlags.websiteConfig === "object"
+    ? salon.featureFlags.websiteConfig
+    : {};
   const showServices = catalogSettings?.showServices !== false;
   const showProducts = catalogSettings?.showProducts !== false && ecommerceSettings?.storeEnabled === true;
 
@@ -61,7 +64,11 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
     salon: { ...salon, settings: undefined, catalogSettings: undefined, ecommerceSettings: undefined },
     services,
     products,
-    websiteConfig: salon.websiteConfig || { heroTitle: "", heroSubtitle: "", heroImage: "" },
+    websiteConfig: {
+      heroTitle: String(websiteConfig.heroTitle || ""),
+      heroSubtitle: String(websiteConfig.heroSubtitle || ""),
+      heroImage: String(websiteConfig.heroImage || "")
+    },
     genericSettings,
     legalContent,
     catalogSettings,

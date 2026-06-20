@@ -138,14 +138,18 @@ const normalizeIndianPhone = (value) => {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
   let digits = raw.replace(/\D/g, "");
-  if (digits.startsWith("0091")) digits = digits.slice(2);
-  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
-  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.startsWith("0091")) digits = digits.slice(4);
+  else if (digits.startsWith("91") && digits.length > 10) digits = digits.slice(2);
+  else if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
   return `+91${digits}`;
 };
 const indianPhoneSchema = z.string().trim()
   .transform(normalizeIndianPhone)
-  .refine((value) => /^\+\d{10,15}$/.test(value), "Enter a valid phone number with country code (e.g. +91... or +92...)");
+  .refine((value) => /^\+91\d{10}$/.test(value), "Enter a valid 10-digit Indian phone number");
+const requiredIndianPhoneSchema = z.string().trim()
+  .min(5, "Phone must be at least 5 characters")
+  .transform(normalizeIndianPhone)
+  .refine((value) => /^\+91\d{10}$/.test(value), "Enter a valid 10-digit Indian phone number");
 const optionalIndianPhoneSchema = z.union([z.literal(""), indianPhoneSchema]).optional()
   .transform((value) => value || undefined);
 const vendorPhoneSchema = z.string().trim().refine(
@@ -159,8 +163,8 @@ const emailOrIndianPhoneSchema = z.string().trim().transform((value) => (
 )).refine((value) => (
   value.includes("@")
     ? /^[^\s@]+@(?:[^\s@]+\.[^\s@]+|local)$/i.test(value)
-    : /^\+\d{10,15}$/.test(value)
-), "Enter a valid email address or international phone number");
+    : /^\+91\d{10}$/.test(value)
+), "Enter a valid email address or 10-digit Indian phone number");
 const isValidDateString = (value) => !Number.isNaN(Date.parse(String(value)));
 const requiredDateString = z.string().trim().min(1).pipe(z.string().refine(isValidDateString, "Invalid date"));
 const optionalDateString = z.union([z.literal(""), z.string().trim().refine(isValidDateString, "Invalid date")]).optional();
@@ -181,21 +185,10 @@ const invoiceItemSchema = z.object({
   packageId: z.string().optional(),
   serviceName: z.string().min(1).optional(),
   staffUserId: z.string().optional(),
-  staffUserSalonId: z.string().optional(),
   staffName: z.string().optional(),
   qty: z.number().positive(),
   unitPrice: z.number().nonnegative().optional(),
-  originalUnitPrice: z.number().nonnegative().optional(),
-  discountPct: z.number().min(0).max(100).optional(),
-  discountAmt: z.number().min(0).optional(),
   taxPct: z.number().min(0).default(0),
-  validityDays: z.number().int().min(0).optional(),
-  purchaseDate: optionalDateString,
-  customServices: z.array(z.any()).optional(),
-  customProducts: z.array(z.any()).optional(),
-  isCustom: z.boolean().optional(),
-  note: optionalString,
-  gcCode: z.string().optional(),
   packageSessionsUsed: z.number().int().min(0).optional(),
   membershipWalletUsed: z.number().min(0).optional()
 }).refine((value) => value.serviceId || value.productId || value.membershipPlanId || value.packageId || value.serviceName, {
@@ -254,7 +247,7 @@ export const schemas = {
   }),
   plan: z.object({
     body: z.object({
-      name: z.string().min(2),
+      name: z.string().min(1),
       monthlyPrice: z.number().min(0),
       yearlyPrice: z.number().min(0),
       trialDays: z.number().int().min(0),
@@ -314,22 +307,42 @@ export const schemas = {
       isPopular: z.boolean().optional()
     })
   }),
-    customer: z.object({
-      body: z.object({
-        name: z.string().min(2),
-        phone: indianPhoneSchema,
-        email: optionalEmailLike,
-        branchId: z.string().optional(),
-        gender: optionalString,
-        dateOfBirth: optionalDateString,
-        anniversary: optionalDateString,
-        source: optionalString,
+  customer: z.object({
+    body: z.object({
+      name: z.string().min(1),
+      phone: requiredIndianPhoneSchema,
+      email: optionalEmailLike,
+      branchId: z.string().optional(),
+      gender: optionalString,
+      dateOfBirth: optionalDateString,
+      anniversary: optionalDateString,
+      source: optionalString,
       tags: z.array(z.string()).optional(),
       notes: optionalString,
       preferences: optionalString,
       preferredStaffId: z.string().optional(),
       allergies: optionalString,
       skinNotes: optionalString
+    })
+  }),
+  customerPatch: z.object({
+    body: z.object({
+      name: z.string().min(2).optional(),
+      phone: indianPhoneSchema.optional(),
+      email: optionalEmailLike,
+      branchId: z.string().optional(),
+      gender: optionalString,
+      dateOfBirth: optionalDateString,
+      anniversary: optionalDateString,
+      source: optionalString,
+      tags: z.array(z.string()).optional(),
+      notes: optionalString,
+      preferences: optionalString,
+      preferredStaffId: z.string().optional(),
+      allergies: optionalString,
+      skinNotes: optionalString
+    }).refine((body) => Object.keys(body).length > 0, {
+      message: "At least one customer field is required"
     })
   }),
   serviceCategory: z.object({ body: z.object({ name: z.string().min(2), parentId: z.string().nullable().optional() }) }),
@@ -640,6 +653,9 @@ export const schemas = {
       walletValue: z.number().min(0).nullish(),
       serviceSpecificOnly: z.boolean().optional(),
       isActive: z.boolean().optional(),
+      renewalReminder: z.number().int().min(0).optional(),
+      sharable: z.boolean().optional(),
+      maxShareCount: z.number().int().min(0).nullish(),
       serviceIds: z.array(idSchema).optional()
     })
   }),
@@ -669,9 +685,15 @@ export const schemas = {
   assignMembership: z.object({
     body: z.object({
       customerId: idSchema,
-      membershipPlanId: idSchema,
+      membershipPlanId: z.string(),
       soldInvoiceId: z.string().nullish(),
-      startsAt: optionalDateString
+      startsAt: optionalDateString,
+      staffId: z.string().optional().nullable(),
+      price: z.number().optional(),
+      validityDays: z.number().optional(),
+      customServices: z.array(z.any()).optional(),
+      isCustom: z.boolean().optional(),
+      name: z.string().optional()
     })
   }),
   packagePlan: z.object({
@@ -706,9 +728,15 @@ export const schemas = {
   assignPackage: z.object({
     body: z.object({
       customerId: idSchema,
-      packageId: idSchema,
+      packageId: z.string(),
       soldInvoiceId: z.string().nullish(),
-      startsAt: optionalDateString
+      startsAt: optionalDateString,
+      staffId: z.string().optional().nullable(),
+      price: z.number().optional(),
+      validityDays: z.number().optional(),
+      customServices: z.array(z.any()).optional(),
+      isCustom: z.boolean().optional(),
+      name: z.string().optional()
     })
   }),
   packageRedeem: z.object({
@@ -1147,11 +1175,33 @@ export const schemas = {
     body: z.object({
       customerId: z.string().nullable().optional(),
       campaignId: z.string().nullable().optional(),
-      phone: indianPhoneSchema,
+      channel: z.enum(["EMAIL", "WHATSAPP", "SMS"]).optional(),
+      phone: indianPhoneSchema.optional(),
+      email: z.string().email().nullable().optional(),
       templateType: optionalString,
       message: z.string().min(2),
       mediaKind: optionalString,
       mediaUrl: optionalString
+    }).superRefine((value, ctx) => {
+      const channel = String(value.channel || "EMAIL").toUpperCase();
+      if (channel === "EMAIL") {
+        if (!String(value.email || "").trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["email"],
+            message: "Email is required for email delivery"
+          });
+        }
+        return;
+      }
+
+      if (!String(value.phone || "").trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["phone"],
+          message: "Phone is required for WhatsApp or SMS delivery"
+        });
+      }
     })
   }),
   whatsappAutomation: z.object({

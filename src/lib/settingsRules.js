@@ -1,25 +1,28 @@
 import { prisma } from "./prisma.js";
 
-const asObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
-
 export const toRuleNumber = (value, fallback = 0) => {
-  const next = Number(value);
-  return Number.isFinite(next) ? next : fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-export const getSalonAdvancedSettings = async (salonId) => {
-  return {};
+export const getProgramSettings = async (salonId, key, fallback = {}) => {
+  if (!prisma?.salonSetting?.findFirst) {
+    return { ...fallback };
+  }
+  const row = await prisma.salonSetting.findFirst({
+    where: { salonId, branchId: null },
+    select: { advancedSettings: true }
+  });
+  const advancedSettings = typeof row?.advancedSettings === "object" && row.advancedSettings ? row.advancedSettings : {};
+  const programSettings = typeof advancedSettings?.[key] === "object" && advancedSettings[key] ? advancedSettings[key] : {};
+  return { ...fallback, ...programSettings };
 };
 
-export const getProgramSettings = async (salonId, key, defaults = {}) => {
-  const advancedSettings = await getSalonAdvancedSettings(salonId);
-  return { ...defaults, ...asObject(advancedSettings[key]) };
-};
-
-export const ensureProgramEnabled = (settings, label) => {
-  if (settings.enabled === false) {
-    const error = new Error(`${label} is disabled in salon settings`);
+export const ensureProgramEnabled = (settings, label = "Program") => {
+  if (settings?.enabled === false) {
+    const error = new Error(`${label} are disabled in settings`);
     error.status = 400;
     throw error;
   }
+  return settings;
 };

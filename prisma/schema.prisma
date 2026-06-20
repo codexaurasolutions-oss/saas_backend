@@ -320,6 +320,15 @@ model UserSalon {
   showInCatalog        Boolean                   @default(false)
   isArchived           Boolean                   @default(false)
   permissions          Json?
+  joiningDate          DateTime?
+  designation          String?
+  uanNumber            String?
+  reportingToId        String?
+  workingHours         String?
+  bankName             String?
+  bankBranch           String?
+  accountNumber        String?
+  ifscCode             String?
   user                 User                      @relation(fields: [userId], references: [id])
   salon                Salon                     @relation(fields: [salonId], references: [id])
   branch               Branch?                   @relation(fields: [branchId], references: [id])
@@ -478,6 +487,7 @@ model Service {
   branchId             String?
   categoryId           String?
   name                 String
+  gender               String?                   @default("UNISEX")
   price                Decimal                   @db.Decimal(10, 2)
   durationMin          Int
   description          String?
@@ -930,6 +940,9 @@ model MembershipPlan {
   serviceSpecificOnly Boolean                 @default(false)
   isPublicVisible     Boolean                 @default(true)
   isActive            Boolean                 @default(true)
+  renewalReminder     Int                     @default(15)
+  sharable            Boolean                 @default(false)
+  maxShareCount       Int?
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
   salon               Salon                   @relation(fields: [salonId], references: [id])
@@ -1348,6 +1361,8 @@ model SalonSetting {
   bookingNotes           String?
   cancellationPolicy     String?
   paymentGatewaySettings Json?
+  advancedSettings       Json?
+  smsSettings            Json?
   allowNegativeStock     Boolean  @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt

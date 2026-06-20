@@ -1,56 +1,102 @@
 import { prisma } from "./prisma.js";
 import { sendMail } from "./mailer.js";
-import { renderMessageTemplate } from "./messageTemplates.js";
+import { renderTemplateText, resolveTemplateContext } from "./phase3.js";
 
-const asObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
+const normalizeTemplateType = (value) => String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 
-const getNotificationSettings = async (salonId) => {
-  return {};
+const fallbackTemplates = {
+  invoice_template: {
+    title: "Invoice Update",
+    content: "Hi {{customer_name}}, your invoice amount is {{invoice_amount}}."
+  },
+  invoice_refund_template: {
+    title: "Invoice Refund",
+    content: "Hi {{customer_name}}, a refund has been processed against your invoice."
+  },
+  invoice_cancel_template: {
+    title: "Invoice Cancelled",
+    content: "Hi {{customer_name}}, your invoice has been cancelled."
+  },
+  membership_purchase_template: {
+    title: "Membership Activated",
+    content: "Hi {{customer_name}}, your membership is now active."
+  },
+  package_purchase_template: {
+    title: "Package Activated",
+    content: "Hi {{customer_name}}, your package is now active."
+  },
+  payment_receipt_template: {
+    title: "Payment Receipt",
+    content: "Hi {{customer_name}}, we have received your payment for {{invoice_amount}}."
+  },
+  appointment_confirmation: {
+    title: "Appointment Confirmation",
+    content: "Hi {{customer_name}}, your appointment at {{salon_name}} is confirmed for {{appointment_date_time}}."
+  },
+  appointment_reminder: {
+    title: "Appointment Reminder",
+    content: "Reminder: {{customer_name}}, your appointment at {{salon_name}} is on {{appointment_date_time}}."
+  },
+  appointment_cancelled: {
+    title: "Appointment Cancelled",
+    content: "Hi {{customer_name}}, your appointment at {{salon_name}} scheduled for {{appointment_date_time}} has been cancelled."
+  },
+  order_confirmation: {
+    title: "Order Confirmation",
+    content: "Hi {{customer_name}}, your order {{order_number}} at {{salon_name}} has been received. Total: {{order_amount}}."
+  },
+  enquiry_follow_up: {
+    title: "Enquiry Follow Up",
+    content: "Hi {{customer_name}}, thank you for your enquiry with {{salon_name}}. Our team has shared a follow-up update for you."
+  },
+  feedback_follow_up: {
+    title: "Feedback Follow Up",
+    content: "Hi {{customer_name}}, thank you for sharing your feedback with {{salon_name}}. Our team has added an update and will stay in touch."
+  }
 };
 
-const nl2br = (value) => String(value || "").replace(/\n/g, "<br />");
-
-export const sendCustomerTemplateEmail = async ({
-  salonId,
-  toEmail,
-  templateType,
-  context = {},
-  extraVariables = {},
-  subject = null
-}) => {
-  if (!toEmail) return { sent: false, reason: "missing_email" };
-  const settings = await getNotificationSettings(salonId);
-  if (settings.emailEnabled === false) return { sent: false, reason: "email_disabled" };
-
-  const { template, variables, content } = await renderMessageTemplate({
-    salonId,
-    type: templateType,
-    context,
-    extraVariables
+const resolveMessageTemplate = async (salonId, templateType) => {
+  const normalizedType = normalizeTemplateType(templateType);
+  const existing = await prisma.messageTemplate.findUnique({
+    where: { salonId_type: { salonId, type: normalizedType } }
   });
+  if (existing) return existing;
+  const fallback = fallbackTemplates[normalizedType];
+  if (!fallback) return null;
+  return prisma.messageTemplate.create({
+    data: {
+      salonId,
+      type: normalizedType,
+      title: fallback.title,
+      content: fallback.content,
+      variables: []
+    }
+  });
+};
 
-  const finalSubject = subject || template.title || "Skillify update";
+export const attemptCustomerTemplateEmail = async ({ salonId, toEmail, templateType, context = {} }) => {
+  if (!toEmail) {
+    return { skipped: true, reason: "missing-recipient" };
+  }
+
+  const template = await resolveMessageTemplate(salonId, templateType);
+  if (!template?.content) {
+    return { skipped: true, reason: "missing-template" };
+  }
+
+  const variables = await resolveTemplateContext(salonId, context);
+  const html = renderTemplateText(template.content, variables);
+  const subject = template.title || "Salon update";
   const delivery = await sendMail({
     to: toEmail,
-    subject: finalSubject,
-    text: content,
-    html: `<div style="font-family:Arial,sans-serif;padding:24px;background:#f7f4ef;color:#18212c;"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:24px;padding:28px;"><h2 style="margin-top:0;">${finalSubject}</h2><p style="font-size:15px;line-height:1.7;margin:0;">${nl2br(content)}</p></div></div>`
+    subject,
+    html: `<div>${html}</div>`,
+    text: html
   });
 
   return {
-    sent: true,
-    delivery,
-    subject: finalSubject,
-    variables,
-    content
+    skipped: false,
+    templateType: template.type,
+    delivery
   };
-};
-
-export const attemptCustomerTemplateEmail = async (payload) => {
-  try {
-    return await sendCustomerTemplateEmail(payload);
-  } catch (error) {
-    console.error("Customer email automation failed:", error?.message || error);
-    return { sent: false, reason: "send_failed", error: error?.message || "Unknown email failure" };
-  }
 };

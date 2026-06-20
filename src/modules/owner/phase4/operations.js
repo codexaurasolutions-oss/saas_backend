@@ -3,6 +3,36 @@ import { calculatePayrollItem, createAuditLog, createStaffNotification } from ".
 import { buildCsv } from "../../../lib/phase2.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const INJECTIONS_FILE = path.join(__dirname, "../../../../data/injections.json");
+
+const getInjections = () => {
+  try {
+    if (!fs.existsSync(INJECTIONS_FILE)) {
+      fs.mkdirSync(path.dirname(INJECTIONS_FILE), { recursive: true });
+      fs.writeFileSync(INJECTIONS_FILE, JSON.stringify([]));
+      return [];
+    }
+    const data = fs.readFileSync(INJECTIONS_FILE, "utf8");
+    return JSON.parse(data || "[]");
+  } catch (err) {
+    return [];
+  }
+};
+
+const saveInjections = (injections) => {
+  try {
+    fs.mkdirSync(path.dirname(INJECTIONS_FILE), { recursive: true });
+    fs.writeFileSync(INJECTIONS_FILE, JSON.stringify(injections, null, 2));
+  } catch (err) {
+    // ignore
+  }
+};
 
 const toDate = (value) => (value ? new Date(value) : null);
 
@@ -25,8 +55,8 @@ export const registerOperationsRoutes = (ownerRouter) => {
         ...(branchId ? { branchId } : {}),
         ...(q ? {
           OR: [
-            { title: { contains: q } },
-            { notes: { contains: q } }
+            { title: { contains: q, mode: "insensitive" } },
+            { notes: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },
@@ -54,13 +84,6 @@ export const registerOperationsRoutes = (ownerRouter) => {
     });
     res.status(201).json(row);
   });
-  ownerRouter.get("/expenses/accounts", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
-    res.json({ injections: [] });
-  });
-
-  ownerRouter.post("/expenses/accounts/injections", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "create"), async (req, res) => {
-    res.status(201).json({ id: "inj_123", amount: req.body.amount });
-  });
 
   ownerRouter.get("/expenses/reports", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
     const rows = await prisma.expense.findMany({ where: { salonId: req.salonId }, include: { category: true, branch: true }, orderBy: { expenseDate: "desc" } });
@@ -69,6 +92,27 @@ export const registerOperationsRoutes = (ownerRouter) => {
       approved: rows.filter((row) => row.status === "APPROVED" || row.status === "PAID"),
       rows
     });
+  });
+
+  ownerRouter.get("/expenses/accounts", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
+    const injections = getInjections().filter(inj => inj.salonId === req.salonId);
+    res.json({ injections });
+  });
+
+  ownerRouter.post("/expenses/accounts/injections", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "create"), async (req, res) => {
+    const injections = getInjections();
+    const newInjection = {
+      id: "inj-" + Math.random().toString(36).substr(2, 9),
+      salonId: req.salonId,
+      accountMode: req.body.accountMode,
+      paymentMode: req.body.paymentMode,
+      amount: Number(req.body.amount),
+      note: req.body.note,
+      createdAt: new Date().toISOString()
+    };
+    injections.push(newInjection);
+    saveInjections(injections);
+    res.status(201).json(newInjection);
   });
 
   ownerRouter.get("/expenses/:id", requireFeatureEnabled("expenses"), requireSalonPermission("expenses", "view"), async (req, res) => {
@@ -119,7 +163,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
       where: {
         salonId: req.salonId,
         ...(branchId ? { branchId } : {}),
-        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q } } } } } } : {})
+        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q, mode: "insensitive" } } } } } } : {})
       },
       include: { userSalon: { include: { user: true } }, branch: true },
       orderBy: { checkInAt: "desc" }
@@ -169,7 +213,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
       where: {
         salonId: req.salonId,
         ...(status ? { status } : {}),
-        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q } } } } } } : {})
+        ...(q ? { userSalon: { is: { user: { is: { name: { contains: q, mode: "insensitive" } } } } } } : {})
       },
       include: { userSalon: { include: { user: true } }, approvedByMembership: { include: { user: true } } },
       orderBy: { createdAt: "desc" }
@@ -211,9 +255,9 @@ export const registerOperationsRoutes = (ownerRouter) => {
         salonId: req.salonId,
         ...(q ? {
           OR: [
-            { name: { contains: q } },
-            { targetType: { contains: q } },
-            { notes: { contains: q } }
+            { name: { contains: q, mode: "insensitive" } },
+            { targetType: { contains: q, mode: "insensitive" } },
+            { notes: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },
@@ -335,10 +379,10 @@ export const registerOperationsRoutes = (ownerRouter) => {
           { OR: [{ userSalonId: null }, { userSalonId: req.user.membershipId || "" }] },
           ...(q ? [{
             OR: [
-              { title: { contains: q } },
-              { message: { contains: q } },
-              { type: { contains: q } },
-              { linkUrl: { contains: q } }
+              { title: { contains: q, mode: "insensitive" } },
+              { message: { contains: q, mode: "insensitive" } },
+              { type: { contains: q, mode: "insensitive" } },
+              { linkUrl: { contains: q, mode: "insensitive" } }
             ]
           }] : [])
         ],
@@ -359,10 +403,10 @@ export const registerOperationsRoutes = (ownerRouter) => {
           { OR: [{ userSalonId: null }, { userSalonId: req.user.membershipId || "" }] },
           ...(q ? [{
             OR: [
-              { title: { contains: q } },
-              { message: { contains: q } },
-              { type: { contains: q } },
-              { linkUrl: { contains: q } }
+              { title: { contains: q, mode: "insensitive" } },
+              { message: { contains: q, mode: "insensitive" } },
+              { type: { contains: q, mode: "insensitive" } },
+              { linkUrl: { contains: q, mode: "insensitive" } }
             ]
           }] : [])
         ],
@@ -408,12 +452,12 @@ export const registerOperationsRoutes = (ownerRouter) => {
         ...(req.query.action ? { action: String(req.query.action) } : {}),
         ...(q ? {
           OR: [
-            { module: { contains: q } },
-            { action: { contains: q } },
-            { entityType: { contains: q } },
-            { entityId: { contains: q } },
-            { summary: { contains: q } },
-            { reference: { contains: q } }
+            { module: { contains: q, mode: "insensitive" } },
+            { action: { contains: q, mode: "insensitive" } },
+            { entityType: { contains: q, mode: "insensitive" } },
+            { entityId: { contains: q, mode: "insensitive" } },
+            { summary: { contains: q, mode: "insensitive" } },
+            { reference: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },
@@ -429,12 +473,12 @@ export const registerOperationsRoutes = (ownerRouter) => {
         ...(req.query.action ? { action: String(req.query.action) } : {}),
         ...(q ? {
           OR: [
-            { module: { contains: q } },
-            { action: { contains: q } },
-            { entityType: { contains: q } },
-            { entityId: { contains: q } },
-            { summary: { contains: q } },
-            { reference: { contains: q } }
+            { module: { contains: q, mode: "insensitive" } },
+            { action: { contains: q, mode: "insensitive" } },
+            { entityType: { contains: q, mode: "insensitive" } },
+            { entityId: { contains: q, mode: "insensitive" } },
+            { summary: { contains: q, mode: "insensitive" } },
+            { reference: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },

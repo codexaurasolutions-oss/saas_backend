@@ -1,4 +1,5 @@
 import { prisma } from "../../../lib/prisma.js";
+import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { createAuditLog, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -59,6 +60,33 @@ export const registerEnquiryRoutes = (ownerRouter) => {
       summary: `Enquiry created for ${row.name}`
     });
     res.status(201).json(row);
+  });
+
+  ownerRouter.get("/enquiries/follow-ups", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
+    res.json(await prisma.enquiryFollowUp.findMany({
+      where: { enquiry: { salonId: req.salonId } },
+      include: { enquiry: true, actorMembership: { include: { user: true } } },
+      orderBy: { createdAt: "desc" }
+    }));
+  });
+
+  ownerRouter.get("/enquiries/reports", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
+    const rows = await prisma.enquiry.findMany({ where: { salonId: req.salonId }, include: { interestedBranch: true, interestedService: true } });
+    const statusBreakdown = rows.reduce((acc, row) => {
+      acc[row.status] = (acc[row.status] || 0) + 1;
+      return acc;
+    }, {});
+    const sourceBreakdown = rows.reduce((acc, row) => {
+      acc[row.source] = (acc[row.source] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({
+      total: rows.length,
+      converted: rows.filter((row) => row.status === "CONVERTED").length,
+      statusBreakdown,
+      sourceBreakdown,
+      rows
+    });
   });
 
   ownerRouter.get("/enquiries/:id", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
@@ -133,6 +161,15 @@ export const registerEnquiryRoutes = (ownerRouter) => {
     if (req.body.dueAt) {
       await prisma.enquiry.update({ where: { id: enquiry.id }, data: { followUpAt: new Date(req.body.dueAt) } });
     }
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: enquiry.email || "",
+      templateType: "enquiry_follow_up",
+      context: {
+        customer_name: enquiry.name,
+        salon_name: "Skillify ERP"
+      }
+    });
     res.status(201).json(row);
   });
 
@@ -193,30 +230,4 @@ export const registerEnquiryRoutes = (ownerRouter) => {
     res.status(201).json(appointment);
   });
 
-  ownerRouter.get("/enquiries/follow-ups", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
-    res.json(await prisma.enquiryFollowUp.findMany({
-      where: { enquiry: { salonId: req.salonId } },
-      include: { enquiry: true, actorMembership: { include: { user: true } } },
-      orderBy: { createdAt: "desc" }
-    }));
-  });
-
-  ownerRouter.get("/enquiries/reports", requireFeatureEnabled("enquiries"), requireSalonPermission("enquiries", "view"), async (req, res) => {
-    const rows = await prisma.enquiry.findMany({ where: { salonId: req.salonId }, include: { interestedBranch: true, interestedService: true } });
-    const statusBreakdown = rows.reduce((acc, row) => {
-      acc[row.status] = (acc[row.status] || 0) + 1;
-      return acc;
-    }, {});
-    const sourceBreakdown = rows.reduce((acc, row) => {
-      acc[row.source] = (acc[row.source] || 0) + 1;
-      return acc;
-    }, {});
-    res.json({
-      total: rows.length,
-      converted: rows.filter((row) => row.status === "CONVERTED").length,
-      statusBreakdown,
-      sourceBreakdown,
-      rows
-    });
-  });
 };

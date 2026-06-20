@@ -1,6 +1,7 @@
 import { prisma } from "../../../lib/prisma.js";
 import { buildCsv } from "../../../lib/phase2.js";
-import { buildWhatsAppLink, getCampaignAudience, renderTemplateText } from "../../../lib/phase3.js";
+import { dispatchCampaign } from "../../../lib/emailAutomation.js";
+import { getCampaignAudience } from "../../../lib/phase3.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
 
@@ -54,10 +55,10 @@ export const registerCampaignRoutes = (ownerRouter) => {
         ...(audienceFilter ? { audienceFilter } : {}),
         ...(q ? {
           OR: [
-            { name: { contains: q } },
-            { message: { contains: q } },
-            { type: { contains: q } },
-            { audienceFilter: { contains: q } }
+            { name: { contains: q, mode: "insensitive" } },
+            { message: { contains: q, mode: "insensitive" } },
+            { type: { contains: q, mode: "insensitive" } },
+            { audienceFilter: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },
@@ -159,30 +160,13 @@ export const registerCampaignRoutes = (ownerRouter) => {
   ownerRouter.post("/campaigns/:id/send-placeholder", requireFeatureEnabled("campaigns"), requireSalonPermission("campaigns", "edit"), async (req, res) => {
     const row = await prisma.campaign.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
     if (!row) return res.status(404).json({ message: "Campaign not found" });
-    const audience = await getCampaignAudience(req.salonId, row.audienceFilter, row.audienceMeta || {});
-    const { reachable: reachableAudience, unreachable } = splitAudienceByReachability(row, audience);
-    const whatsappLink = row.type === "WHATSAPP" && reachableAudience[0]?.phone
-      ? buildWhatsAppLink(reachableAudience[0].phone, row.message || "")
-      : null;
-    const updated = await prisma.campaign.update({
-      where: { id: row.id },
-      data: { status: "SENT", sentAt: new Date() }
+    const result = await dispatchCampaign({
+      salonId: req.salonId,
+      campaignId: row.id,
+      actorUserId: req.user.userId,
+      actorMembershipId: req.user.membershipId
     });
-    await prisma.campaignLog.create({
-      data: {
-        campaignId: row.id,
-        eventType: "SENT_PLACEHOLDER",
-        details: `Audience matched ${audience.length}, reachable ${reachableAudience.length}, skipped ${unreachable.length}`
-      }
-    });
-    res.json({
-      campaign: updated,
-      audienceCount: audience.length,
-      reachableCount: reachableAudience.length,
-      skippedCount: unreachable.length,
-      skippedPreview: unreachable.slice(0, 20),
-      whatsappLink
-    });
+    res.json(result);
   });
   ownerRouter.get("/campaigns/:id/logs", requireFeatureEnabled("campaigns"), requireSalonPermission("campaigns", "view"), async (req, res) => {
     const row = await prisma.campaign.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
@@ -193,7 +177,7 @@ export const registerCampaignRoutes = (ownerRouter) => {
       where: {
         campaignId: row.id,
         ...(eventType ? { eventType } : {}),
-        ...(q ? { details: { contains: q } } : {})
+        ...(q ? { details: { contains: q, mode: "insensitive" } } : {})
       },
       orderBy: { createdAt: "desc" }
     }));
@@ -207,7 +191,7 @@ export const registerCampaignRoutes = (ownerRouter) => {
       where: {
         campaignId: row.id,
         ...(eventType ? { eventType } : {}),
-        ...(q ? { details: { contains: q } } : {})
+        ...(q ? { details: { contains: q, mode: "insensitive" } } : {})
       },
       orderBy: { createdAt: "desc" }
     });

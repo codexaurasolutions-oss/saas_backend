@@ -60,9 +60,9 @@ export const registerInventoryRoutes = (ownerRouter) => {
         ...(productType ? { productType } : {}),
         ...(q ? {
           OR: [
-            { name: { contains: q } },
-            { sku: { contains: q } },
-            { barcode: { contains: q } }
+            { name: { contains: q, mode: "insensitive" } },
+            { sku: { contains: q, mode: "insensitive" } },
+            { barcode: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },
@@ -162,9 +162,9 @@ export const registerInventoryRoutes = (ownerRouter) => {
         ...(categoryId ? { categoryId } : {}),
         ...(q ? {
           OR: [
-            { name: { contains: q } },
-            { sku: { contains: q } },
-            { barcode: { contains: q } }
+            { name: { contains: q, mode: "insensitive" } },
+            { sku: { contains: q, mode: "insensitive" } },
+            { barcode: { contains: q, mode: "insensitive" } }
           ]
         } : {})
       },

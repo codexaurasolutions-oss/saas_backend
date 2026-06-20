@@ -1,17 +1,18 @@
 import { prisma } from "../../../lib/prisma.js";
 import { logCustomerTimeline } from "../../../lib/phase2.js";
+import { createPosInvoice } from "../../../lib/pos.js";
 import { requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
 
 export const registerMembershipRoutes = (ownerRouter) => {
   ownerRouter.get("/memberships", requireSalonPermission("memberships", "view"), async (req, res) => {
-    res.json(await prisma.membershipPlan.findMany({ where: { salonId: req.salonId }, include: { services: true }, orderBy: { createdAt: "desc" } }));
+    res.json(await prisma.membershipPlan.findMany({ where: { salonId: req.salonId }, include: { services: { include: { service: true } } }, orderBy: { createdAt: "desc" } }));
   });
 
   ownerRouter.get("/memberships/:id", requireSalonPermission("memberships", "view"), async (req, res) => {
     const plan = await prisma.membershipPlan.findFirst({
       where: { id: req.params.id, salonId: req.salonId },
-      include: { services: true }
+      include: { services: { include: { service: true } } }
     });
     if (!plan) return res.status(404).json({ message: "Membership plan not found" });
     res.json(plan);
@@ -29,7 +30,10 @@ export const registerMembershipRoutes = (ownerRouter) => {
           discountValue: req.body.discountValue ?? null,
           walletValue: req.body.walletValue ?? null,
           serviceSpecificOnly: Boolean(req.body.serviceSpecificOnly),
-          isActive: req.body.isActive ?? true
+          isActive: req.body.isActive ?? true,
+          renewalReminder: req.body.renewalReminder != null ? Number(req.body.renewalReminder) : undefined,
+          sharable: req.body.sharable != null ? Boolean(req.body.sharable) : undefined,
+          maxShareCount: req.body.maxShareCount != null ? Number(req.body.maxShareCount) : null
         }
       });
       if (req.body.serviceIds?.length) {
@@ -38,7 +42,7 @@ export const registerMembershipRoutes = (ownerRouter) => {
           skipDuplicates: true
         });
       }
-      return tx.membershipPlan.findUnique({ where: { id: plan.id }, include: { services: true } });
+      return tx.membershipPlan.findUnique({ where: { id: plan.id }, include: { services: { include: { service: true } } } });
     });
     res.status(201).json(created);
   });
@@ -57,7 +61,10 @@ export const registerMembershipRoutes = (ownerRouter) => {
           discountValue: req.body.discountValue ?? null,
           walletValue: req.body.walletValue ?? null,
           serviceSpecificOnly: Boolean(req.body.serviceSpecificOnly),
-          isActive: req.body.isActive ?? true
+          isActive: req.body.isActive ?? true,
+          renewalReminder: req.body.renewalReminder != null ? Number(req.body.renewalReminder) : undefined,
+          sharable: req.body.sharable != null ? Boolean(req.body.sharable) : undefined,
+          maxShareCount: req.body.maxShareCount != null ? Number(req.body.maxShareCount) : null
         }
       });
       await tx.membershipPlanService.deleteMany({ where: { membershipPlanId: plan.id } });
@@ -67,32 +74,91 @@ export const registerMembershipRoutes = (ownerRouter) => {
           skipDuplicates: true
         });
       }
-      return tx.membershipPlan.findUnique({ where: { id: plan.id }, include: { services: true } });
+      return tx.membershipPlan.findUnique({ where: { id: plan.id }, include: { services: { include: { service: true } } } });
     });
     res.json(updated);
   });
 
   ownerRouter.post("/memberships/assign", requireSalonPermission("memberships", "create"), validate(schemas.assignMembership), async (req, res) => {
-    const plan = await prisma.membershipPlan.findFirst({ where: { id: req.body.membershipPlanId, salonId: req.salonId, isActive: true } });
-    if (!plan) return res.status(404).json({ message: "Membership plan not found" });
-    const startsAt = req.body.startsAt ? new Date(req.body.startsAt) : new Date();
-    const endsAt = new Date(startsAt.getTime() + plan.validityDays * 24 * 60 * 60 * 1000);
-    const created = await prisma.customerMembership.create({
-      data: {
-        salonId: req.salonId,
-        customerId: req.body.customerId,
-        membershipPlanId: plan.id,
-        soldInvoiceId: req.body.soldInvoiceId || null,
-        startsAt,
-        endsAt,
-        remainingWalletValue: plan.benefitType === "WALLET_VALUE" ? plan.walletValue : null
-      },
-      include: { membershipPlan: true }
-    });
-    await prisma.$transaction(async (tx) => {
-      await logCustomerTimeline(tx, req.body.customerId, "MEMBERSHIP", "Membership assigned", plan.name, created.id);
-    });
-    res.status(201).json(created);
+    try {
+      let plan;
+      if (req.body.isCustom || req.body.membershipPlanId === "CUSTOM") {
+        plan = await prisma.membershipPlan.create({
+          data: {
+            salonId: req.salonId,
+            name: req.body.name || "Custom Membership",
+            price: Number(req.body.price || 0),
+            validityDays: Number(req.body.validityDays || 30),
+            benefitType: "DISCOUNT_PERCENT",
+            discountValue: 0,
+            isPublicVisible: false,
+            isActive: true
+          }
+        });
+        if (req.body.customServices && req.body.customServices.length > 0) {
+          await prisma.membershipPlanService.createMany({
+            data: req.body.customServices.map(s => {
+              const serviceId = typeof s === 'string' ? s : (s.id || s.serviceId);
+              return { membershipPlanId: plan.id, serviceId };
+            })
+          });
+        }
+      } else {
+        plan = await prisma.membershipPlan.findFirst({ where: { id: req.body.membershipPlanId, salonId: req.salonId, isActive: true } });
+      }
+      if (!plan) return res.status(404).json({ message: "Membership plan not found" });
+      const startsAt = req.body.startsAt ? new Date(req.body.startsAt) : new Date();
+      const endsAt = new Date(startsAt.getTime() + plan.validityDays * 24 * 60 * 60 * 1000);
+      const created = await prisma.customerMembership.create({
+        data: {
+          salonId: req.salonId,
+          customerId: req.body.customerId,
+          membershipPlanId: plan.id,
+          soldInvoiceId: req.body.soldInvoiceId || null,
+          startsAt,
+          endsAt,
+          remainingWalletValue: plan.benefitType === "WALLET_VALUE" ? plan.walletValue : null
+        },
+        include: { membershipPlan: true }
+      });
+      await prisma.$transaction(async (tx) => {
+        await logCustomerTimeline(tx, req.body.customerId, "MEMBERSHIP", "Membership assigned", plan.name, created.id);
+      });
+
+      // Auto-generate invoice for the membership sale
+      let invoice = null;
+      try {
+        const finalPrice = req.body.price != null ? Number(req.body.price) : Number(plan.price);
+        invoice = await createPosInvoice({
+          salonId: req.salonId,
+          actorUser: req.user,
+          body: {
+            customerId: req.body.customerId,
+            branchId: req.body.branchId || null,
+            items: [{
+              itemType: "MEMBERSHIP",
+              membershipPlanId: plan.id,
+              serviceName: plan.name,
+              unitPrice: finalPrice,
+              qty: 1,
+              taxPct: 0,
+              staffUserId: req.body.staffId || null
+            }],
+            payments: finalPrice > 0 ? [{ mode: req.body.paymentMode || "CASH", amount: finalPrice, note: `Membership: ${plan.name}` }] : [],
+            notes: `Membership assigned: ${plan.name}`
+          }
+        });
+        // Link the invoice to the membership record
+        await prisma.customerMembership.update({ where: { id: created.id }, data: { soldInvoiceId: invoice.id } });
+      } catch (invoiceErr) {
+        console.error("[assign-membership] Invoice creation failed (non-blocking):", invoiceErr.message);
+      }
+
+      res.status(201).json({ assignment: created, invoice: invoice || null });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: err.message || "Failed to assign membership" });
+    }
   });
 
   ownerRouter.post("/customer-memberships/:id/renew", requireSalonPermission("memberships", "edit"), validate(schemas.membershipRenew), async (req, res) => {
@@ -190,13 +256,13 @@ export const registerMembershipRoutes = (ownerRouter) => {
   });
 
   ownerRouter.get("/packages", requireSalonPermission("packages", "view"), async (req, res) => {
-    res.json(await prisma.package.findMany({ where: { salonId: req.salonId }, include: { services: true }, orderBy: { createdAt: "desc" } }));
+    res.json(await prisma.package.findMany({ where: { salonId: req.salonId }, include: { services: { include: { service: true } } }, orderBy: { createdAt: "desc" } }));
   });
 
   ownerRouter.get("/packages/:id", requireSalonPermission("packages", "view"), async (req, res) => {
     const pack = await prisma.package.findFirst({
       where: { id: req.params.id, salonId: req.salonId },
-      include: { services: true }
+      include: { services: { include: { service: true } } }
     });
     if (!pack) return res.status(404).json({ message: "Package not found" });
     res.json(pack);
@@ -218,7 +284,7 @@ export const registerMembershipRoutes = (ownerRouter) => {
         data: req.body.services.map((item) => ({ packageId: pack.id, serviceId: item.serviceId, sessions: item.sessions || 1 })),
         skipDuplicates: true
       });
-      return tx.package.findUnique({ where: { id: pack.id }, include: { services: true } });
+      return tx.package.findUnique({ where: { id: pack.id }, include: { services: { include: { service: true } } } });
     });
     res.status(201).json(created);
   });
@@ -242,32 +308,91 @@ export const registerMembershipRoutes = (ownerRouter) => {
         data: req.body.services.map((item) => ({ packageId: pack.id, serviceId: item.serviceId, sessions: item.sessions || 1 })),
         skipDuplicates: true
       });
-      return tx.package.findUnique({ where: { id: pack.id }, include: { services: true } });
+      return tx.package.findUnique({ where: { id: pack.id }, include: { services: { include: { service: true } } } });
     });
     res.json(updated);
   });
 
   ownerRouter.post("/packages/assign", requireSalonPermission("packages", "create"), validate(schemas.assignPackage), async (req, res) => {
-    const pack = await prisma.package.findFirst({ where: { id: req.body.packageId, salonId: req.salonId, isActive: true } });
-    if (!pack) return res.status(404).json({ message: "Package not found" });
-    const startsAt = req.body.startsAt ? new Date(req.body.startsAt) : new Date();
-    const endsAt = new Date(startsAt.getTime() + pack.validityDays * 24 * 60 * 60 * 1000);
-    const created = await prisma.customerPackage.create({
-      data: {
-        salonId: req.salonId,
-        customerId: req.body.customerId,
-        packageId: pack.id,
-        soldInvoiceId: req.body.soldInvoiceId || null,
-        startsAt,
-        endsAt,
-        remainingSessions: pack.totalSessions
-      },
-      include: { package: true }
-    });
-    await prisma.$transaction(async (tx) => {
-      await logCustomerTimeline(tx, req.body.customerId, "PACKAGE", "Package assigned", pack.name, created.id);
-    });
-    res.status(201).json(created);
+    try {
+      let pack;
+      if (req.body.isCustom || req.body.packageId === "CUSTOM") {
+        pack = await prisma.package.create({
+          data: {
+            salonId: req.salonId,
+            name: req.body.name || "Custom Package",
+            price: Number(req.body.price || 0),
+            totalSessions: req.body.customServices ? req.body.customServices.length : 1,
+            validityDays: Number(req.body.validityDays || 30),
+            isPublicVisible: false,
+            isActive: true
+          }
+        });
+        if (req.body.customServices && req.body.customServices.length > 0) {
+          await prisma.packageService.createMany({
+            data: req.body.customServices.map(s => {
+              const serviceId = typeof s === 'string' ? s : (s.id || s.serviceId);
+              const sessions = typeof s === 'string' ? 1 : (s.sessions || s.qty || 1);
+              return { packageId: pack.id, serviceId, sessions };
+            })
+          });
+        }
+      } else {
+        pack = await prisma.package.findFirst({ where: { id: req.body.packageId, salonId: req.salonId, isActive: true } });
+      }
+      if (!pack) return res.status(404).json({ message: "Package not found" });
+      const startsAt = req.body.startsAt ? new Date(req.body.startsAt) : new Date();
+      const endsAt = new Date(startsAt.getTime() + pack.validityDays * 24 * 60 * 60 * 1000);
+      const created = await prisma.customerPackage.create({
+        data: {
+          salonId: req.salonId,
+          customerId: req.body.customerId,
+          packageId: pack.id,
+          soldInvoiceId: req.body.soldInvoiceId || null,
+          startsAt,
+          endsAt,
+          remainingSessions: pack.totalSessions
+        },
+        include: { package: true }
+      });
+      await prisma.$transaction(async (tx) => {
+        await logCustomerTimeline(tx, req.body.customerId, "PACKAGE", "Package assigned", pack.name, created.id);
+      });
+
+      // Auto-generate invoice for the package sale
+      let invoice = null;
+      try {
+        const finalPrice = req.body.price != null ? Number(req.body.price) : Number(pack.price);
+        invoice = await createPosInvoice({
+          salonId: req.salonId,
+          actorUser: req.user,
+          body: {
+            customerId: req.body.customerId,
+            branchId: req.body.branchId || null,
+            items: [{
+              itemType: "PACKAGE",
+              packageId: pack.id,
+              serviceName: pack.name,
+              unitPrice: finalPrice,
+              qty: 1,
+              taxPct: 0,
+              staffUserId: req.body.staffId || null
+            }],
+            payments: finalPrice > 0 ? [{ mode: req.body.paymentMode || "CASH", amount: finalPrice, note: `Package: ${pack.name}` }] : [],
+            notes: `Package assigned: ${pack.name}`
+          }
+        });
+        // Link the invoice to the package record
+        await prisma.customerPackage.update({ where: { id: created.id }, data: { soldInvoiceId: invoice.id } });
+      } catch (invoiceErr) {
+        console.error("[assign-package] Invoice creation failed (non-blocking):", invoiceErr.message);
+      }
+
+      res.status(201).json({ assignment: created, invoice: invoice || null });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: err.message || "Failed to assign package" });
+    }
   });
 
   ownerRouter.post("/customer-packages/:id/renew", requireSalonPermission("packages", "edit"), validate(schemas.packageRenew), async (req, res) => {
@@ -357,11 +482,10 @@ export const registerMembershipRoutes = (ownerRouter) => {
         invoices: { include: { items: true, payments: true, branch: true }, orderBy: { createdAt: "desc" } },
         memberships: { include: { membershipPlan: true, usageLogs: true }, orderBy: { createdAt: "desc" } },
         packages: { include: { package: true, usageLogs: true }, orderBy: { createdAt: "desc" } },
-        timelineEntries: { orderBy: { createdAt: "desc" } },
-        _count: { select: { invoices: true } }
+        timelineEntries: { orderBy: { createdAt: "desc" } }
       }
     });
     if (!customer) return res.status(404).json({ message: "Customer not found" });
-    res.json({ ...customer, totalOrders: customer._count?.invoices || 0 });
+    res.json(customer);
   });
 };

@@ -27,7 +27,8 @@ describe("phase2 validation schemas", () => {
       body: {
         customerId: "customer-1",
         membershipPlanId: "membership-plan-1",
-        soldInvoiceId: null
+        soldInvoiceId: null,
+        staffId: "staff-001"
       }
     })).not.toThrow();
 
@@ -35,7 +36,8 @@ describe("phase2 validation schemas", () => {
       body: {
         customerId: "customer-1",
         packageId: "package-1",
-        soldInvoiceId: null
+        soldInvoiceId: null,
+        staffId: "staff-001"
       }
     })).not.toThrow();
 
@@ -45,6 +47,24 @@ describe("phase2 validation schemas", () => {
         serviceId: "service-1",
         sessionsUsed: 1,
         invoiceId: null
+      }
+    })).not.toThrow();
+  });
+
+  it("still allows assignment payloads without staffId when owner flow omits it", () => {
+    expect(() => schemas.assignMembership.parse({
+      body: {
+        customerId: "customer-1",
+        membershipPlanId: "membership-plan-1",
+        soldInvoiceId: null
+      }
+    })).not.toThrow();
+
+    expect(() => schemas.assignPackage.parse({
+      body: {
+        customerId: "customer-1",
+        packageId: "package-1",
+        soldInvoiceId: null
       }
     })).not.toThrow();
   });

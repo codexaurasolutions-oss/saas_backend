@@ -1,4 +1,5 @@
 import { prisma } from "../../../lib/prisma.js";
+import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { createAuditLog, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -117,12 +118,24 @@ export const registerFeedbackRoutes = (ownerRouter) => {
   });
 
   ownerRouter.post("/feedback/:id/follow-up", requireFeatureEnabled("feedback"), requireSalonPermission("feedback", "edit"), validate(schemas.feedbackFollowUp), async (req, res) => {
-    const row = await prisma.customerFeedback.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    const row = await prisma.customerFeedback.findFirst({
+      where: { id: req.params.id, salonId: req.salonId },
+      include: { customer: true }
+    });
     if (!row) return res.status(404).json({ message: "Feedback not found" });
     const updated = await prisma.customerFeedback.update({
       where: { id: row.id },
       data: {
         internalNotes: [row.internalNotes, req.body.note].filter(Boolean).join("\n")
+      }
+    });
+    await attemptCustomerTemplateEmail({
+      salonId: req.salonId,
+      toEmail: row.customer?.email || "",
+      templateType: "feedback_follow_up",
+      context: {
+        customerId: row.customerId,
+        customer_name: row.customer?.name || "Customer"
       }
     });
     await createAuditLog({
@@ -137,5 +150,4 @@ export const registerFeedbackRoutes = (ownerRouter) => {
     });
     res.json(updated);
   });
-
 };

@@ -1,11 +1,15 @@
 import { prisma } from "../../../lib/prisma.js";
 import { buildCsv } from "../../../lib/phase2.js";
 import { buildWhatsAppLink, getCampaignAudience, renderTemplateText } from "../../../lib/phase3.js";
+import { sendMail } from "../../../lib/mailer.js";
 import { createAuditLog } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
 
 export const registerCommunicationRoutes = (ownerRouter) => {
+  const normalizeChannel = (value) => String(value || "EMAIL").trim().toUpperCase();
+  const buildEmailHtml = (message) => `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;">${String(message || "")}</div>`;
+
   ownerRouter.get("/campaign-templates", requireFeatureEnabled("campaignTemplates"), requireSalonPermission("campaignTemplates", "view"), async (req, res) => {
     res.json(await prisma.campaignTemplate.findMany({ where: { salonId: req.salonId }, orderBy: { createdAt: "desc" } }));
   });
@@ -220,37 +224,86 @@ export const registerCommunicationRoutes = (ownerRouter) => {
     res.send(csv);
   });
   ownerRouter.post("/whatsapp/send-manual", requireFeatureEnabled("whatsapp"), requireSalonPermission("whatsapp", "create"), validate(schemas.whatsappSend), async (req, res) => {
+    const channel = normalizeChannel(req.body.channel);
+    const recipient = channel === "EMAIL" ? String(req.body.email || "").trim() : String(req.body.phone || "").trim();
+
+    if (channel === "EMAIL") {
+      await sendMail({
+        to: recipient,
+        subject: req.body.templateType || "Salon Update",
+        html: buildEmailHtml(req.body.message),
+        text: req.body.message
+      });
+    }
+
     const row = await prisma.whatsAppLog.create({
       data: {
         salonId: req.salonId,
         customerId: req.body.customerId || null,
         actorMembershipId: req.user.membershipId || null,
         campaignId: req.body.campaignId || null,
-        phone: req.body.phone,
+        phone: recipient,
         templateType: req.body.templateType || null,
         message: req.body.message,
         status: "SENT",
-        linkUrl: buildWhatsAppLink(req.body.phone, req.body.message),
-        metadata: req.body.mediaUrl || req.body.mediaKind ? {
-          mediaKind: req.body.mediaKind || null,
-          mediaUrl: req.body.mediaUrl || null
-        } : null
+        linkUrl: channel === "EMAIL" ? null : buildWhatsAppLink(recipient, req.body.message),
+        metadata: {
+          channel,
+          addressType: channel === "EMAIL" ? "EMAIL" : "PHONE",
+          ...(req.body.mediaUrl || req.body.mediaKind ? {
+            mediaKind: req.body.mediaKind || null,
+            mediaUrl: req.body.mediaUrl || null
+          } : {})
+        }
       }
     });
-    await createAuditLog({ salonId: req.salonId, actorUserId: req.user.userId, actorMembershipId: req.user.membershipId, module: "WHATSAPP", action: "MANUAL_SEND", entityType: "WhatsAppLog", entityId: row.id, summary: `Manual WhatsApp message sent to ${req.body.phone}` });
+    await createAuditLog({
+      salonId: req.salonId,
+      actorUserId: req.user.userId,
+      actorMembershipId: req.user.membershipId,
+      module: "WHATSAPP",
+      action: channel === "EMAIL" ? "MANUAL_EMAIL_SEND" : "MANUAL_SEND",
+      entityType: "WhatsAppLog",
+      entityId: row.id,
+      summary: `${channel === "EMAIL" ? "Manual email" : "Manual WhatsApp message"} sent to ${recipient}`
+    });
     res.status(201).json(row);
   });
   ownerRouter.post("/whatsapp/send-bulk-placeholder", requireFeatureEnabled("whatsapp"), requireSalonPermission("whatsapp", "create"), async (req, res) => {
+    const channel = normalizeChannel(req.body.channel);
     const audience = await getCampaignAudience(req.salonId, req.body.audienceFilter || "ALL_CUSTOMERS", req.body.audienceMeta || {});
-    const rows = audience.filter((customer) => customer.phone).slice(0, 50).map((customer) => ({
+    const eligibleAudience = audience
+      .filter((customer) => (channel === "EMAIL" ? customer.email : customer.phone))
+      .slice(0, 50);
+
+    if (channel === "EMAIL") {
+      await Promise.allSettled(
+        eligibleAudience.map((customer) =>
+          sendMail({
+            to: customer.email,
+            subject: req.body.templateType || "Salon Update",
+            html: buildEmailHtml(req.body.message || "Bulk email placeholder"),
+            text: req.body.message || "Bulk email placeholder"
+          })
+        )
+      );
+    }
+
+    const rows = eligibleAudience.map((customer) => ({
       salonId: req.salonId,
       customerId: customer.id,
       actorMembershipId: req.user.membershipId || null,
-      phone: customer.phone,
+      phone: channel === "EMAIL" ? customer.email : customer.phone,
       templateType: req.body.templateType || "bulk_placeholder",
-      message: req.body.message || "Bulk WhatsApp placeholder",
+      message: req.body.message || (channel === "EMAIL" ? "Bulk email placeholder" : "Bulk WhatsApp placeholder"),
       status: "SENT",
-      linkUrl: buildWhatsAppLink(customer.phone, req.body.message || "Bulk WhatsApp placeholder")
+      linkUrl: channel === "EMAIL" ? null : buildWhatsAppLink(customer.phone, req.body.message || "Bulk WhatsApp placeholder"),
+      metadata: {
+        channel,
+        addressType: channel === "EMAIL" ? "EMAIL" : "PHONE",
+        mediaKind: req.body.mediaKind || null,
+        mediaUrl: req.body.mediaUrl || null
+      }
     }));
     if (rows.length) await prisma.whatsAppLog.createMany({ data: rows });
     res.json({ sentCount: rows.length });

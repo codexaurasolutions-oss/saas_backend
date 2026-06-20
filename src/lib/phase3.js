@@ -619,6 +619,9 @@ export const resolveTemplateContext = async (salonId, context = {}) => {
 
   return {
     ...resolved,
+    ...Object.fromEntries(
+      Object.entries(context || {}).filter(([, value]) => value != null && value !== "")
+    ),
     customerName: resolved.customer_name,
     customerPhone: resolved.customer_phone,
     salonName: resolved.salon_name,

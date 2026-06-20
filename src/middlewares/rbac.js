@@ -11,7 +11,7 @@ export const requireSystemRole = (...roles) => (req, res, next) => {
 };
 
 export const requireSalonPermission = (moduleKey, action = "view") => (req, res, next) => {
-  if (req.user.systemRole === "SUPER_ADMIN") return next();
+  if (req.user.systemRole === "SUPER_ADMIN" || req.user.systemRole === "SALON_OWNER") return next();
   const perms = req.user.permissions || {};
   const allowed = perms[moduleKey]?.includes(action);
   if (!allowed) return res.status(403).json({ message: `No permission: ${moduleKey}.${action}` });
@@ -19,7 +19,7 @@ export const requireSalonPermission = (moduleKey, action = "view") => (req, res,
 };
 
 export const requireFeatureEnabled = (featureKey) => (req, res, next) => {
-  if (req.user.systemRole === "SUPER_ADMIN") return next();
+  if (req.user.systemRole === "SUPER_ADMIN" || req.user.systemRole === "SALON_OWNER") return next();
   const flags = req.user.featureFlags || {};
   if (flags[featureKey] === false) {
     return res.status(403).json({ message: `Feature disabled: ${featureKey}` });

@@ -70,7 +70,8 @@ export const createApp = ({
       error.status = 403;
       return callback(error);
     },
-    credentials: true
+    credentials: true,
+    exposedHeaders: ["Content-Disposition"]
   }));
 
   app.use(helmet({

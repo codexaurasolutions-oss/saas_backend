@@ -3,8 +3,6 @@ import { prisma } from "./prisma.js";
 import { createStockMovement, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, refreshCustomerInsights, toAmount } from "./phase2.js";
 import { calculateLoyaltyEarnPoints, getCustomerValidLoyaltyBalance, reverseInvoiceLoyalty } from "./phase4.js";
 
-const toNumber = (value) => Number(value || 0);
-
 const normalizeStatus = (paidAmount, total, refundAmount = 0, cancelled = false) => {
   if (cancelled) return "CANCELLED";
   if (refundAmount >= total && total > 0) return "REFUNDED";
@@ -12,6 +10,8 @@ const normalizeStatus = (paidAmount, total, refundAmount = 0, cancelled = false)
   if (paidAmount > 0) return "PARTIAL";
   return "UNPAID";
 };
+
+const toNumber = (value) => Number(value || 0);
 
 export const createInvoiceNumber = async (tx, salonId, branchId) => {
   const count = await tx.invoice.count({ where: { salonId } });
@@ -264,16 +264,15 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
       }
       const qty = 1;
       const taxPct = toAmount(item.taxPct || 0);
-      const packagePrice = toAmount(item.unitPrice != null ? item.unitPrice : plan.price);
-      const preTax = packagePrice * qty;
+      const preTax = toAmount(plan.price) * qty;
       itemDrafts.push({
         itemType,
         membershipPlanId: plan.id,
-        staffUserSalonId: item.staffUserSalonId || item.staffUserId || null,
+        staffUserSalonId: item.staffUserId || null,
         serviceName: plan.name,
         staffName: item.staffName || null,
         qty,
-        unitPrice: packagePrice,
+        unitPrice: toAmount(plan.price),
         taxPct,
         lineTotal: preTax + (preTax * taxPct) / 100,
         commissionAmount: 0
@@ -305,16 +304,15 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
       }
       const qty = 1;
       const taxPct = toAmount(item.taxPct || 0);
-      const packagePrice = toAmount(item.unitPrice != null ? item.unitPrice : pack.price);
-      const preTax = packagePrice * qty;
+      const preTax = toAmount(pack.price) * qty;
       itemDrafts.push({
         itemType,
         packageId: pack.id,
-        staffUserSalonId: item.staffUserSalonId || item.staffUserId || null,
+        staffUserSalonId: item.staffUserId || null,
         serviceName: pack.name,
         staffName: item.staffName || null,
         qty,
-        unitPrice: packagePrice,
+        unitPrice: toAmount(pack.price),
         taxPct,
         lineTotal: preTax + (preTax * taxPct) / 100,
         commissionAmount: 0

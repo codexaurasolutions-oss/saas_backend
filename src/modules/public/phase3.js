@@ -1,4 +1,5 @@
 import { createOnlineOrder, createPublicAppointment, ensurePublicStoreEnabled, getPublicCatalogData, resolvePublicSalonBySlug, trackCatalogEvent, validateCartAgainstStock } from "../../lib/phase3.js";
+import { attemptCustomerTemplateEmail } from "../../lib/emailNotifications.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { schemas, validate } from "../../middlewares/validate.js";
 
@@ -31,7 +32,17 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     res.status(201).json({ ok: true, eventId: event?.id || null });
   }));
   publicRouter.post("/salons/:slug/book", validate(schemas.publicBooking), asyncHandler(async (req, res) => {
-    res.status(201).json(await createPublicAppointment({ slug: req.params.slug, body: req.body }));
+    const appointment = await createPublicAppointment({ slug: req.params.slug, body: req.body });
+    await attemptCustomerTemplateEmail({
+      salonId: appointment.salonId,
+      toEmail: appointment.customer?.email || "",
+      templateType: "appointment_confirmation",
+      context: {
+        appointmentId: appointment.id,
+        customerId: appointment.customerId
+      }
+    });
+    res.status(201).json(appointment);
   }));
   publicRouter.post("/salons/:slug/cart/validate", validate(schemas.cartValidate), asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
@@ -42,6 +53,16 @@ export const registerPublicPhase3Routes = (publicRouter) => {
   publicRouter.post("/salons/:slug/orders", validate(schemas.createOrder), asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     await ensurePublicStoreEnabled(salon.id);
-    res.status(201).json(await createOnlineOrder({ salonId: salon.id, body: req.body, source: "PUBLIC_STORE" }));
+    const order = await createOnlineOrder({ salonId: salon.id, body: req.body, source: "PUBLIC_STORE" });
+    await attemptCustomerTemplateEmail({
+      salonId: salon.id,
+      toEmail: order.customer?.email || "",
+      templateType: "order_confirmation",
+      context: {
+        orderId: order.id,
+        customerId: order.customerId
+      }
+    });
+    res.status(201).json(order);
   }));
 };

@@ -14,6 +14,11 @@ const defaultTemplates = {
     content: "Reminder: {{customer_name}}, your appointment at {{salon_name}} is on {{appointment_date_time}}.",
     variables: ["customer_name", "salon_name", "appointment_date_time"]
   },
+  appointment_cancelled: {
+    title: "Appointment Cancelled",
+    content: "Hi {{customer_name}}, your appointment at {{salon_name}} scheduled for {{appointment_date_time}} has been cancelled.",
+    variables: ["customer_name", "salon_name", "appointment_date_time"]
+  },
   order_confirmation: {
     title: "Order Confirmation",
     content: "Hi {{customer_name}}, your order {{order_number}} at {{salon_name}} has been received. Total: {{order_amount}}.",
@@ -52,6 +57,16 @@ const defaultTemplates = {
   feedback_request_template: {
     title: "Feedback Request",
     content: "Hi {{customer_name}}, please share your feedback for {{salon_name}}.",
+    variables: ["customer_name", "salon_name"]
+  },
+  enquiry_follow_up: {
+    title: "Enquiry Follow Up",
+    content: "Hi {{customer_name}}, thank you for your enquiry with {{salon_name}}. Our team has shared a follow-up update for you.",
+    variables: ["customer_name", "salon_name"]
+  },
+  feedback_follow_up: {
+    title: "Feedback Follow Up",
+    content: "Hi {{customer_name}}, thank you for sharing your feedback with {{salon_name}}. Our team has added an update and will stay in touch.",
     variables: ["customer_name", "salon_name"]
   }
 };
