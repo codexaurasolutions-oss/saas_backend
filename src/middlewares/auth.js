@@ -5,9 +5,14 @@ import { runExpiredDemoCleanup } from "../lib/trialCleanup.js";
 
 export const authMiddleware = async (req, res, next) => {
   try {
+    let token = null;
     const header = req.headers.authorization;
-    if (!header || !header.startsWith("Bearer ")) return next();
-    const token = header.slice(7);
+    if (header && header.startsWith("Bearer ")) {
+      token = header.slice(7);
+    } else if (req.query.token) {
+      token = req.query.token;
+    }
+    if (!token) return next();
     const decoded = verifyAccessToken(token);
 
     const user = await prisma.user.findUnique({
