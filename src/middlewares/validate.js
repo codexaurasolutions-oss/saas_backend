@@ -711,7 +711,12 @@ export const schemas = {
       validityDays: z.number().optional(),
       customServices: z.array(z.any()).optional(),
       isCustom: z.boolean().optional(),
-      name: z.string().optional()
+      name: z.string().optional(),
+      online: z.number().optional().nullable(),
+      offline: z.number().optional().nullable(),
+      balance: z.number().optional().nullable(),
+      advance: z.number().optional().nullable(),
+      remarks: z.string().optional().nullable()
     })
   }),
   packagePlan: z.object({
@@ -754,7 +759,14 @@ export const schemas = {
       validityDays: z.number().optional(),
       customServices: z.array(z.any()).optional(),
       isCustom: z.boolean().optional(),
-      name: z.string().optional()
+      name: z.string().optional(),
+      online: z.number().optional().nullable(),
+      offline: z.number().optional().nullable(),
+      balance: z.number().optional().nullable(),
+      advance: z.number().optional().nullable(),
+      remarks: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+      remark: z.string().optional().nullable()
     })
   }),
   packageRedeem: z.object({

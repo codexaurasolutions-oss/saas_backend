@@ -739,10 +739,10 @@ ownerRouter.get("/customers", requireSalonPermission("customers", "view"), async
       ...(branchId ? { invoices: { some: { branchId } } } : {}),
       ...(query ? {
         OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { phone: { contains: query, mode: "insensitive" } },
-          { email: { contains: query, mode: "insensitive" } },
-          { source: { contains: query, mode: "insensitive" } }
+          { name: { contains: query } },
+          { phone: { contains: query } },
+          { email: { contains: query } },
+          { source: { contains: query } }
         ]
       } : {}),
       ...(filter === "high_spender" ? { totalSpend: { gte: 10000 } } : {}),

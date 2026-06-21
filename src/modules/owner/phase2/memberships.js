@@ -121,7 +121,8 @@ export const registerMembershipRoutes = (ownerRouter) => {
           soldInvoiceId: req.body.soldInvoiceId || null,
           startsAt,
           endsAt,
-          remainingWalletValue: plan.benefitType === "WALLET_VALUE" ? plan.walletValue : null
+          remainingWalletValue: plan.benefitType === "WALLET_VALUE" ? plan.walletValue : null,
+          remarks: req.body.remarks || null
         },
         include: { membershipPlan: true }
       });
@@ -133,6 +134,21 @@ export const registerMembershipRoutes = (ownerRouter) => {
       let invoice = null;
       try {
         const finalPrice = req.body.price != null ? Number(req.body.price) : Number(plan.price);
+        const payments = [];
+        if (req.body.online != null && Number(req.body.online) > 0) {
+          payments.push({ mode: "ONLINE", amount: Number(req.body.online), note: "Online payment" });
+        }
+        if (req.body.offline != null && Number(req.body.offline) > 0) {
+          payments.push({ mode: "CASH", amount: Number(req.body.offline), note: "Offline payment" });
+        }
+        if (req.body.advance != null && Number(req.body.advance) > 0) {
+          payments.push({ mode: "CASH", amount: Number(req.body.advance), note: "Advance payment" });
+        }
+
+        if (payments.length === 0 && finalPrice > 0) {
+          payments.push({ mode: req.body.paymentMode || "CASH", amount: finalPrice, note: `Membership: ${plan.name}` });
+        }
+
         invoice = await createPosInvoice({
           salonId: req.salonId,
           actorUser: req.user,
@@ -148,8 +164,8 @@ export const registerMembershipRoutes = (ownerRouter) => {
               taxPct: 0,
               staffUserId: req.body.staffId || null
             }],
-            payments: finalPrice > 0 ? [{ mode: req.body.paymentMode || "CASH", amount: finalPrice, note: `Membership: ${plan.name}` }] : [],
-            notes: `Membership assigned: ${plan.name}`
+            payments,
+            notes: req.body.remarks || `Membership assigned: ${plan.name}`
           }
         });
         // Link the invoice to the membership record
