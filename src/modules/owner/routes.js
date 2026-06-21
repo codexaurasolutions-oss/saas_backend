@@ -773,6 +773,10 @@ ownerRouter.get("/customers", requireSalonPermission("customers", "view"), async
       }
     }, 0);
 
+    const namePart = (row.name || "GUEST").trim().split(" ")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    const phonePart = (row.phone || "0000").replace(/[^0-9]/g, "").slice(-4);
+    const referralCode = `${namePart}${phonePart}`;
+
     const { invoices, timelineEntries, ...rest } = row;
     return {
       ...rest,
@@ -780,7 +784,8 @@ ownerRouter.get("/customers", requireSalonPermission("customers", "view"), async
       membershipCount: row._count?.memberships || 0,
       packageCount: row._count?.packages || 0,
       advanceAmount,
-      balanceAmount
+      balanceAmount,
+      referralCode
     };
   });
   res.json(mapped);
@@ -850,12 +855,17 @@ ownerRouter.get("/customers/:id", requireSalonPermission("customers", "view"), a
   });
 
   const totalOrders = customer.invoices.length;
+  const namePart = (customer.name || "GUEST").trim().split(" ")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const phonePart = (customer.phone || "0000").replace(/[^0-9]/g, "").slice(-4);
+  const referralCode = `${namePart}${phonePart}`;
+
   res.json({
     ...customer,
     totalOrders,
     advanceAmount,
     balanceAmount,
-    familyMembers
+    familyMembers,
+    referralCode
   });
 });
 
