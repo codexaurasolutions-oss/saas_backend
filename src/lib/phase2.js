@@ -243,19 +243,38 @@ export const checkStaffAvailability = async ({
       throw error;
     }
 
-    const schedule = membership.staffSchedules.find((item) => item.weekday === weekday);
-    if (schedule) {
-      if (schedule.isOffDay) {
+    const salonSetting = await getSalonSetting(prisma, salonId, branchId);
+    const rosterRows = salonSetting?.advancedSettings?.rosterManagement?.rows;
+    const rosterRow = Array.isArray(rosterRows) ? rosterRows.find(r => r.id === membershipId) : null;
+
+    if (rosterRow) {
+      if (!rosterRow.isWorking) {
         const error = new Error(`${membership.user.name} is off on this day`);
         error.status = 400;
         throw error;
       }
-      const scheduleStart = timeToMinutes(schedule.startTime);
-      const scheduleEnd = timeToMinutes(schedule.endTime);
-      if (startMinutes < scheduleStart || endMinutes > scheduleEnd) {
-        const error = new Error(`${membership.user.name} is outside working hours`);
+      const rosterStart = timeToMinutes(rosterRow.fromTime || "09:00");
+      const rosterEnd = timeToMinutes(rosterRow.toTime || "21:00");
+      if (startMinutes < rosterStart || endMinutes > rosterEnd) {
+        const error = new Error(`${membership.user.name} is outside working hours (${rosterRow.fromTime} - ${rosterRow.toTime})`);
         error.status = 400;
         throw error;
+      }
+    } else {
+      const schedule = membership.staffSchedules.find((item) => item.weekday === weekday);
+      if (schedule) {
+        if (schedule.isOffDay) {
+          const error = new Error(`${membership.user.name} is off on this day`);
+          error.status = 400;
+          throw error;
+        }
+        const scheduleStart = timeToMinutes(schedule.startTime);
+        const scheduleEnd = timeToMinutes(schedule.endTime);
+        if (startMinutes < scheduleStart || endMinutes > scheduleEnd) {
+          const error = new Error(`${membership.user.name} is outside working hours`);
+          error.status = 400;
+          throw error;
+        }
       }
     }
 
