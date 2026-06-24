@@ -1,6 +1,54 @@
 import { prisma } from "../../../lib/prisma.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
-import { buildInvoiceWhere, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
+import { isOwnScopedStaff, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
+
+const parseDateSafe = (val, isEnd = false) => {
+  if (!val) return null;
+  const suffix = isEnd ? "T23:59:59.999Z" : "T00:00:00.000Z";
+  const d = new Date(val + suffix);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const buildInvoiceWhere = (req, branchId) => {
+  const start = parseDateSafe(req.query.start, false);
+  const end = parseDateSafe(req.query.end, true);
+  const stylistId = req.query.stylistId;
+  const productId = req.query.productId;
+  const serviceId = req.query.serviceId;
+  const categoryId = req.query.categoryId;
+  const customerId = req.query.customerId;
+  const status = req.query.status;
+  const date = req.query.date ? parseDateSafe(req.query.date, false) : null;
+
+  const dateFilter = date
+    ? { createdAt: { gte: date, lte: new Date(date.getTime() + 86399999) } }
+    : (start || end
+      ? {
+          createdAt: {
+            ...(start ? { gte: start } : {}),
+            ...(end ? { lte: end } : {})
+          }
+        }
+      : {});
+
+  const itemsFilter = {};
+  if (stylistId) itemsFilter.staffUserSalonId = stylistId;
+  if (productId) itemsFilter.productId = productId;
+  if (serviceId) itemsFilter.serviceId = serviceId;
+
+  const useItemFilter = Object.keys(itemsFilter).length > 0;
+
+  return {
+    salonId: req.salonId,
+    ...(branchId ? { branchId } : {}),
+    ...(isOwnScopedStaff(req, "reports") ? { items: { some: { staffUserSalonId: req.user.membershipId } } } : {}),
+    ...(useItemFilter ? { items: { some: itemsFilter } } : {}),
+    ...(categoryId ? { items: { some: { product: { categoryId } } } } : {}),
+    ...(customerId ? { customerId } : {}),
+    ...(status ? { status } : {}),
+    ...dateFilter
+  };
+};
 
 const buildDateRange = (req) => {
   const { start, end, date } = req.query || {};
