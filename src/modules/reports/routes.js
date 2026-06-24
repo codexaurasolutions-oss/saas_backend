@@ -37,16 +37,41 @@ const parseDateSafe = (val, isEnd = false) => {
 const buildInvoiceWhere = (req, branchId) => {
   const start = parseDateSafe(req.query.start, false);
   const end = parseDateSafe(req.query.end, true);
+  const stylistId = req.query.stylistId;
+  const productId = req.query.productId;
+  const serviceId = req.query.serviceId;
+  const categoryId = req.query.categoryId;
+  const customerId = req.query.customerId;
+  const status = req.query.status;
+  const date = req.query.date ? parseDateSafe(req.query.date, false) : null;
+
+  const dateFilter = date
+    ? { createdAt: { gte: date, lte: new Date(date.getTime() + 86399999) } }
+    : (start || end
+      ? {
+          createdAt: {
+            ...(start ? { gte: start } : {}),
+            ...(end ? { lte: end } : {})
+          }
+        }
+      : {});
+
+  const itemsFilter = {};
+  if (stylistId) itemsFilter.staffUserSalonId = stylistId;
+  if (productId) itemsFilter.productId = productId;
+  if (serviceId) itemsFilter.serviceId = serviceId;
+
+  const useItemFilter = Object.keys(itemsFilter).length > 0;
+
   return {
     salonId: req.salonId,
     ...(branchId ? { branchId } : {}),
     ...(isOwnScopedStaff(req, "reports") ? { items: { some: { staffUserSalonId: req.user.membershipId } } } : {}),
-    ...(start || end ? {
-      createdAt: {
-        ...(start ? { gte: start } : {}),
-        ...(end ? { lte: end } : {})
-      }
-    } : {})
+    ...(useItemFilter ? { items: { some: itemsFilter } } : {}),
+    ...(categoryId ? { items: { some: { product: { categoryId } } } } : {}),
+    ...(customerId ? { customerId } : {}),
+    ...(status ? { status } : {}),
+    ...dateFilter
   };
 };
 
@@ -58,18 +83,28 @@ const buildPaymentWhere = (req, branchId) => ({
 const buildAppointmentWhere = (req, branchId) => {
   const start = parseDateSafe(req.query.start, false);
   const end = parseDateSafe(req.query.end, true);
+  const stylistId = req.query.stylistId;
+  const status = req.query.status;
+  const date = req.query.date ? parseDateSafe(req.query.date, false) : null;
   return {
     salonId: req.salonId,
     ...(branchId ? { branchId } : {}),
     ...(isOwnScopedStaff(req, "reports")
       ? { items: { some: { assignedStaff: { some: { userSalonId: req.user.membershipId } } } } }
-      : {}),
-    ...(start || end ? {
-      startAt: {
-        ...(start ? { gte: start } : {}),
-        ...(end ? { lte: end } : {})
-      }
-    } : {})
+      : stylistId
+        ? { items: { some: { assignedStaff: { some: { userSalonId: stylistId } } } } }
+        : {}),
+    ...(status ? { status } : {}),
+    ...(date
+      ? { startAt: { gte: date, lte: new Date(date.getTime() + 86399999) } }
+      : (start || end
+        ? {
+            startAt: {
+              ...(start ? { gte: start } : {}),
+              ...(end ? { lte: end } : {})
+            }
+          }
+        : {}))
   };
 };
 

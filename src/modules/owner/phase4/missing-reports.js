@@ -3,11 +3,30 @@ import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewa
 import { buildInvoiceWhere, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
 
 const buildDateRange = (req) => {
-  const { start, end } = req.query || {};
+  const { start, end, date } = req.query || {};
+  if (date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const endDate = new Date(d);
+    endDate.setHours(23, 59, 59, 999);
+    return { startDate: d, endDate };
+  }
   const startDate = start ? new Date(start) : (() => { const d = new Date(); d.setDate(d.getDate() - 30); d.setHours(0,0,0,0); return d; })();
   const endDate = end ? new Date(end) : new Date();
   endDate.setHours(23,59,59,999);
   return { startDate, endDate };
+};
+
+const buildReportFilters = (req) => {
+  return {
+    stylistId: req.query?.stylistId || null,
+    productId: req.query?.productId || null,
+    serviceId: req.query?.serviceId || null,
+    categoryId: req.query?.categoryId || null,
+    customerId: req.query?.customerId || null,
+    vendorId: req.query?.vendorId || null,
+    status: req.query?.status || null
+  };
 };
 
 const safeName = (s) => String(s || "").replace(/[\\]/g, "\\\\").replace(/[\\"]/g, '\\"').replace(/\\n/g, " ");
@@ -89,8 +108,9 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   // ============ Staff Attendance ============
   ownerRouter.get("/reports/staff-attendance", requireFeatureEnabled("attendance"), requireSalonPermission("attendance", "view"), async (req, res) => {
     const { startDate, endDate } = buildDateRange(req);
+    const { stylistId } = buildReportFilters(req);
     const attendance = await prisma.attendanceRecord.findMany({
-      where: { salonId: req.salonId, date: { gte: startDate, lte: endDate } },
+      where: { salonId: req.salonId, date: { gte: startDate, lte: endDate }, ...(stylistId ? { userSalonId: stylistId } : {}) },
       include: { userSalon: { include: { user: true } } },
       orderBy: { date: "desc" },
       take: 500
@@ -126,13 +146,21 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   // ============ Membership Redemption ============
   ownerRouter.get("/reports/membership-redemption", requireFeatureEnabled("memberships"), requireSalonPermission("memberships", "view"), async (req, res) => {
     const { startDate, endDate } = buildDateRange(req);
+    const { customerId, stylistId } = buildReportFilters(req);
     const usage = await prisma.membershipUsage.findMany({
-      where: { createdAt: { gte: startDate, lte: endDate }, customerMembership: { salonId: req.salonId } },
-      include: { customerMembership: { include: { customer: true, membershipPlan: true } } },
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+        customerMembership: {
+          salonId: req.salonId,
+          ...(customerId ? { customerId } : {})
+        }
+      },
+      include: { customerMembership: { include: { customer: true, membershipPlan: true } }, assignedStaff: { include: { user: true } } },
       orderBy: { createdAt: "desc" },
       take: 500
     });
-    res.json(usage.map((u, idx) => ({
+    const filtered = stylistId ? usage.filter((u) => u.assignedStaff?.userSalonId === stylistId) : usage;
+    res.json(filtered.map((u, idx) => ({
       "Date": u.createdAt,
       "Customer": u.customerMembership?.customer?.name || "-",
       "Membership": u.customerMembership?.membershipPlan?.name || "-",
@@ -172,13 +200,21 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   // ============ Package Redemption ============
   ownerRouter.get("/reports/package-redemption", requireFeatureEnabled("packages"), requireSalonPermission("packages", "view"), async (req, res) => {
     const { startDate, endDate } = buildDateRange(req);
+    const { customerId, stylistId } = buildReportFilters(req);
     const usage = await prisma.packageUsage.findMany({
-      where: { createdAt: { gte: startDate, lte: endDate }, customerPackage: { salonId: req.salonId } },
-      include: { customerPackage: { include: { customer: true, package: true } } },
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+        customerPackage: {
+          salonId: req.salonId,
+          ...(customerId ? { customerId } : {})
+        }
+      },
+      include: { customerPackage: { include: { customer: true, package: true } }, assignedStaff: { include: { user: true } } },
       orderBy: { createdAt: "desc" },
       take: 500
     });
-    res.json(usage.map((u, idx) => ({
+    const filtered = stylistId ? usage.filter((u) => u.assignedStaff?.userSalonId === stylistId) : usage;
+    res.json(filtered.map((u, idx) => ({
       "Date": u.createdAt,
       "Customer": u.customerPackage?.customer?.name || "-",
       "Package": u.customerPackage?.package?.name || "-",
@@ -396,8 +432,9 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   // ============ Material Received (Purchase Orders Received) ============
   ownerRouter.get("/reports/material-received", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
     const { startDate, endDate } = buildDateRange(req);
+    const { vendorId, productId } = buildReportFilters(req);
     const orders = await prisma.purchaseOrder.findMany({
-      where: { salonId: req.salonId, status: { in: ["RECEIVED", "PARTIALLY_RECEIVED"] }, receivedAt: { gte: startDate, lte: endDate } },
+      where: { salonId: req.salonId, status: { in: ["RECEIVED", "PARTIALLY_RECEIVED"] }, receivedAt: { gte: startDate, lte: endDate }, ...(vendorId ? { vendorId } : {}) },
       include: { vendor: true, items: { include: { product: true } } },
       orderBy: { receivedAt: "desc" },
       take: 500
@@ -405,6 +442,7 @@ export const registerMissingReportRoutes = (ownerRouter) => {
     const rows = [];
     orders.forEach((o) => {
       o.items.forEach((item) => {
+        if (productId && item.productId !== productId) return;
         rows.push({
           "Date": o.receivedAt,
           "Product": item.product?.name || "-",
@@ -537,8 +575,14 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   // ============ Inventory Transaction Report ============
   ownerRouter.get("/reports/inventory-transaction", requireFeatureEnabled("inventory"), requireSalonPermission("inventory", "view"), async (req, res) => {
     const { startDate, endDate } = buildDateRange(req);
+    const { productId, stylistId } = buildReportFilters(req);
     const movements = await prisma.stockMovement.findMany({
-      where: { salonId: req.salonId, createdAt: { gte: startDate, lte: endDate } },
+      where: {
+        salonId: req.salonId,
+        createdAt: { gte: startDate, lte: endDate },
+        ...(productId ? { productId } : {}),
+        ...(stylistId ? { userSalonId: stylistId } : {})
+      },
       include: { product: true, branch: true, userSalon: { include: { user: true } } },
       orderBy: { createdAt: "desc" },
       take: 500
