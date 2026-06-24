@@ -52,6 +52,58 @@ const fallbackTemplates = {
   feedback_follow_up: {
     title: "Feedback Follow Up",
     content: "Hi {{customer_name}}, thank you for sharing your feedback with {{salon_name}}. Our team has added an update and will stay in touch."
+  },
+  feedback_request_template: {
+    title: "Feedback Request",
+    content: "Hi {{customer_name}}, thank you for your visit at {{salon_name}}! We'd love to hear from you. Share your feedback here: {{feedback_link}}"
+  },
+  birthday_offer_template: {
+    title: "Happy Birthday!",
+    content: "Hi {{customer_name}}, wishing you a very happy birthday from all of us at {{salon_name}}! 🎂 A special birthday offer awaits you — visit us to claim it."
+  },
+  anniversary_offer_template: {
+    title: "Happy Anniversary!",
+    content: "Hi {{customer_name}}, happy anniversary from {{salon_name}}! 💍 We have a special offer just for you — come celebrate with us."
+  },
+  loyalty_earning_template: {
+    title: "Loyalty Points Earned",
+    content: "Hi {{customer_name}}, you just earned {{points_earned}} loyalty points at {{salon_name}}! 🌟 Your new balance is {{new_balance}} points."
+  },
+  loyalty_expiry_template: {
+    title: "Loyalty Points Expiring Soon",
+    content: "Hi {{customer_name}}, your loyalty points at {{salon_name}} are expiring soon! Don't let them go to waste — book your next visit today."
+  },
+  membership_expiry_template: {
+    title: "Membership Expiring Soon",
+    content: "Hi {{customer_name}}, your membership at {{salon_name}} is expiring on {{membership_expiry}}. Renew now to keep enjoying your exclusive benefits!"
+  },
+  membership_renewal_template: {
+    title: "Membership Renewed",
+    content: "Hi {{customer_name}}, great news! Your membership at {{salon_name}} has been successfully renewed until {{membership_expiry}}. Enjoy your continued benefits! 🎉"
+  },
+  package_expiry_template: {
+    title: "Package Expiring Soon",
+    content: "Hi {{customer_name}}, your package at {{salon_name}} is expiring soon! You have {{package_balance}} sessions remaining — book your appointment today."
+  },
+  gift_card_issued: {
+    title: "Gift Card Received",
+    content: "Hi {{customer_name}}, you have received a gift card from {{salon_name}}! 🎁 Code: {{gift_card_code}} | Balance: ₹{{gift_card_amount}}. Use it on your next visit!"
+  },
+  gift_card_expiry_template: {
+    title: "Gift Card Expiring Soon",
+    content: "Hi {{customer_name}}, your gift card at {{salon_name}} is expiring soon! Redeem it before it expires."
+  },
+  gift_card_redeemed_template: {
+    title: "Gift Card Used",
+    content: "Hi {{customer_name}}, your gift card ({{gift_card_code}}) was used for ₹{{amount_used}} at {{salon_name}}. Remaining balance: ₹{{balance_amount}}."
+  },
+  referral_code_sms: {
+    title: "Your Referral Code",
+    content: "Hi {{customer_name}}, here is your referral code for {{salon_name}}: {{referral_code}} 🎁 Share it with friends — both of you will be rewarded when they visit us!"
+  },
+  referrer_reward_sms: {
+    title: "Referral Reward Received!",
+    content: "Hi {{customer_name}}, great news! You earned {{points_earned}} loyalty points at {{salon_name}} for referring a friend. 🎉 Keep sharing and keep earning!"
   }
 };
 

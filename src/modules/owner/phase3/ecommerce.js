@@ -1,5 +1,7 @@
 import { prisma } from "../../../lib/prisma.js";
+import { getNotificationToggles } from "../../../lib/emailAutomation.js";
 import { convertOrderToInvoice, createOnlineOrder, reverseOrderStock } from "../../../lib/phase3.js";
+import { createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
 
@@ -103,7 +105,14 @@ export const registerEcommerceRoutes = (ownerRouter) => {
           note: req.body.note || null
         }
       });
-      if (row.customerId) {
+
+      // Customer in-app notification — gated by toggle
+      const { isOn } = await getNotificationToggles(req.salonId).catch(() => ({ isOn: () => true }));
+      const toggleKey = req.body.status === "CONFIRMED" ? "orderConfirmed"
+        : req.body.status === "CANCELLED" ? "orderRejected"
+        : "messageForOrders";
+
+      if (row.customerId && isOn("messageForOrders") && isOn(toggleKey)) {
         await tx.customerNotification.create({
           data: {
             salonId: req.salonId,
@@ -114,6 +123,19 @@ export const registerEcommerceRoutes = (ownerRouter) => {
           }
         });
       }
+
+      // Staff in-app notification for new/confirmed orders
+      if (isOn("orderPlacedToStaff") && ["CONFIRMED", "PROCESSING"].includes(req.body.status)) {
+        await createStaffNotification({
+          salonId: req.salonId,
+          userSalonId: null,
+          title: `Order ${order.orderNumber} ${req.body.status}`,
+          message: `An order has been ${req.body.status.toLowerCase()}.`,
+          type: "ORDER",
+          linkUrl: `/admin/orders/${row.id}`
+        }).catch(() => {});
+      }
+
       return tx.onlineOrder.findUnique({ where: { id: row.id }, include: includeOrder });
     });
     res.json(updated);
@@ -134,7 +156,10 @@ export const registerEcommerceRoutes = (ownerRouter) => {
           cancelledAt: new Date()
         }
       });
-      if (row.customerId) {
+
+      const { isOn } = await getNotificationToggles(req.salonId).catch(() => ({ isOn: () => true }));
+
+      if (row.customerId && isOn("messageForOrders") && isOn("orderRejected")) {
         await tx.customerNotification.create({
           data: {
             salonId: req.salonId,
@@ -145,6 +170,19 @@ export const registerEcommerceRoutes = (ownerRouter) => {
           }
         });
       }
+
+      // Owner in-app notification
+      if (isOn("orderRejected")) {
+        await createStaffNotification({
+          salonId: req.salonId,
+          userSalonId: null,
+          title: `Order ${order.orderNumber} Cancelled`,
+          message: req.body.note || "An order has been cancelled.",
+          type: "ORDER",
+          linkUrl: `/admin/orders/${row.id}`
+        }).catch(() => {});
+      }
+
       return tx.onlineOrder.findUnique({ where: { id: row.id }, include: includeOrder });
     });
     res.json(updated);

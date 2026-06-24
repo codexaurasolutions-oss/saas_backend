@@ -50,6 +50,12 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
   const legalContent = typeof salonSettings?.advancedSettings === "object"
     ? salonSettings.advancedSettings?.legalContent || {}
     : {};
+  const uiSettings = typeof salonSettings?.advancedSettings === "object"
+    ? salonSettings.advancedSettings?.uiSettings || {}
+    : {};
+  const footerContent = typeof salonSettings?.advancedSettings === "object"
+    ? salonSettings.advancedSettings?.footerContent || {}
+    : {};
   const websiteConfig = typeof salon.featureFlags === "object" && salon.featureFlags?.websiteConfig && typeof salon.featureFlags.websiteConfig === "object"
     ? salon.featureFlags.websiteConfig
     : {};
@@ -71,6 +77,8 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
     },
     genericSettings,
     legalContent,
+    uiSettings,
+    footerContent,
     catalogSettings,
     ecommerceSettings,
     visibility: {

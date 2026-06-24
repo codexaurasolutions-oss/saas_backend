@@ -110,7 +110,7 @@ export const recordLoyaltyTransaction = async ({
     throw error;
   }
 
-  return prisma.$transaction(async (tx) => {
+  const tx_result = await prisma.$transaction(async (tx) => {
     await tx.customer.update({
       where: { id: customerId },
       data: { loyaltyPoints: nextBalance }
@@ -132,6 +132,70 @@ export const recordLoyaltyTransaction = async ({
       }
     });
   });
+
+  // ── Notification dispatch (non-blocking) ─────────────────────────────────
+  if (points > 0) {
+    try {
+      const setting = await prisma.salonSetting.findFirst({
+        where: { salonId, branchId: null }
+      });
+      const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
+      const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+      const isReferralTransaction = type === "BONUS" || (note && /refer/i.test(note));
+
+      if (toggles.loyaltyEarning !== false) {
+        await prisma.customerNotification.create({
+          data: {
+            salonId,
+            customerId,
+            title: "\uD83C\uDF1F Loyalty Points Earned!",
+            message: `You earned ${points} loyalty points! Your new balance is ${nextBalance} points.`
+          }
+        }).catch(() => {});
+
+        if (emailEnabled) {
+          const recipient = await prisma.customer.findUnique({ where: { id: customerId }, select: { email: true } });
+          if (recipient?.email) {
+            const { attemptCustomerTemplateEmail } = await import("./emailNotifications.js");
+            await attemptCustomerTemplateEmail({
+              salonId,
+              toEmail: recipient.email,
+              templateType: "loyalty_earning_template",
+              context: { customerId, pointsEarned: points, newBalance: nextBalance }
+            }).catch(() => {});
+          }
+        }
+      }
+
+      if (isReferralTransaction && toggles.referrerRewardSMS !== false) {
+        await prisma.customerNotification.create({
+          data: {
+            salonId,
+            customerId,
+            title: "\uD83C\uDF89 Referral Reward Received!",
+            message: `You earned ${points} bonus points for referring a friend! Balance: ${nextBalance} pts.`
+          }
+        }).catch(() => {});
+
+        if (emailEnabled) {
+          const recipient = await prisma.customer.findUnique({ where: { id: customerId }, select: { email: true } });
+          if (recipient?.email) {
+            const { attemptCustomerTemplateEmail } = await import("./emailNotifications.js");
+            await attemptCustomerTemplateEmail({
+              salonId,
+              toEmail: recipient.email,
+              templateType: "referrer_reward_sms",
+              context: { customerId, pointsEarned: points, note: note || "Referral Reward" }
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.error("[phase4] Loyalty notification error (non-blocking):", notifyErr.message);
+    }
+  }
+
+  return tx_result;
 };
 
 export const reverseInvoiceLoyalty = async (tx, invoice, actorUser = null) => {

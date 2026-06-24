@@ -197,6 +197,45 @@ export const registerMembershipRoutes = (ownerRouter) => {
       await logCustomerTimeline(tx, membership.customerId, "MEMBERSHIP_RENEWAL", "Membership renewed", req.body.note || membership.membershipPlan.name, membership.id);
       return updated;
     });
+
+    // ── Wire membershipRenewal toggle ──────────────────────────────────────────
+    try {
+      const setting = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
+      const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
+      const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+
+      if (toggles.membershipRenewal !== false) {
+        const customer = await prisma.customer.findUnique({
+          where: { id: membership.customerId },
+          select: { email: true, name: true }
+        });
+
+        await prisma.customerNotification.create({
+          data: {
+            salonId: req.salonId,
+            customerId: membership.customerId,
+            title: "🎉 Membership Renewed!",
+            message: `Your membership "${membership.membershipPlan.name}" has been renewed! Valid until ${nextEnd.toLocaleDateString()}.`
+          }
+        }).catch(() => {});
+
+        if (emailEnabled && customer?.email) {
+          const { attemptCustomerTemplateEmail } = await import("../../../lib/emailNotifications.js");
+          await attemptCustomerTemplateEmail({
+            salonId: req.salonId,
+            toEmail: customer.email,
+            templateType: "membership_renewal_template",
+            context: {
+              customerId: membership.customerId,
+              customerMembershipId: membership.id
+            }
+          }).catch(() => {});
+        }
+      }
+    } catch (notifyErr) {
+      console.error("[memberships] Renewal notification error (non-blocking):", notifyErr.message);
+    }
+
     res.json(result);
   });
 

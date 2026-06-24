@@ -1,8 +1,9 @@
 import crypto from "crypto";
 import { prisma } from "../../../lib/prisma.js";
-import { maybeSendFeedbackRequestForAppointment } from "../../../lib/emailAutomation.js";
+import { getNotificationToggles, maybeSendFeedbackRequestForAppointment } from "../../../lib/emailAutomation.js";
 import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { checkStaffAvailability, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
+import { createCustomerNotification, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
 import { assignAppointmentItems, buildAppointmentScope, canAccessAppointment, fetchAppointment, logAppointmentChange, nextNumber } from "./shared.js";
@@ -13,21 +14,91 @@ const sendRouteError = (res, error, fallbackMessage) => {
   return res.status(status).json({ message });
 };
 
-const sendAppointmentTemplateEmail = async (salonId, appointmentId, templateType) => {
-  const appointment = await fetchAppointment(salonId, appointmentId);
-  const toEmail = appointment?.customer?.email || "";
-  if (!toEmail) {
-    return { skipped: true, reason: "missing-recipient" };
-  }
-  return attemptCustomerTemplateEmail({
-    salonId,
-    toEmail,
-    templateType,
-    context: {
-      appointmentId,
-      customerId: appointment.customerId
+/**
+ * Send appointment email only if the relevant toggle is ON.
+ * Also creates in-app notifications for customer and (where applicable) all salon staff.
+ */
+const dispatchAppointmentEvent = async (salonId, appointmentId, {
+  toggleKey,             // e.g. "appointmentConfirmedToCustomer"
+  templateType,          // e.g. "appointment_confirmation"
+  ownerToggleKey = null, // e.g. "appointmentCreatedToOwner"
+  ownerTitle = null,
+  ownerMessage = null,
+  staffToggleKey = null, // e.g. "appointmentMsgToStaff"
+  staffTitle = null,
+  staffMessage = null,
+  branchId = null
+}) => {
+  try {
+    const appointment = await fetchAppointment(salonId, appointmentId);
+    if (!appointment) return { skipped: true, reason: "appointment-not-found" };
+
+    const { isOn, emailEnabled } = await getNotificationToggles(salonId, branchId || appointment.branchId);
+
+    // Master switch: if messageForAppointments is OFF, suppress all appointment notifications
+    if (!isOn("messageForAppointments")) return { skipped: true, reason: "messageForAppointments-disabled" };
+
+    // 1. Customer email
+    const customerEmail = appointment?.customer?.email || "";
+    if (toggleKey && isOn(toggleKey) && emailEnabled && customerEmail) {
+      await attemptCustomerTemplateEmail({
+        salonId,
+        toEmail: customerEmail,
+        templateType,
+        context: { appointmentId, customerId: appointment.customerId }
+      }).catch((err) => console.error(`[appt-email] ${templateType}:`, err.message));
     }
-  });
+
+    // 2. Customer in-app notification
+    if (toggleKey && isOn(toggleKey) && appointment.customerId) {
+      const labelMap = {
+        appointment_confirmation: "Appointment Confirmed",
+        appointment_cancelled: "Appointment Cancelled",
+        appointment_reminder: "Appointment Reminder",
+        feedback_follow_up: "Feedback Request"
+      };
+      await createCustomerNotification({
+        salonId,
+        customerId: appointment.customerId,
+        title: labelMap[templateType] || "Appointment Update",
+        message: `Your appointment at ${new Date(appointment.startAt).toLocaleString()} has been updated.`
+      }).catch(() => {});
+    }
+
+    // 3. Owner / salon-wide in-app notification
+    if (ownerToggleKey && isOn(ownerToggleKey) && ownerTitle) {
+      await createStaffNotification({
+        salonId,
+        userSalonId: null, // null = broadcast to all staff with access
+        title: ownerTitle,
+        message: ownerMessage || ownerTitle,
+        type: "APPOINTMENT",
+        linkUrl: `/admin/appointments/${appointmentId}`
+      }).catch(() => {});
+    }
+
+    // 4. Staff in-app notification
+    if (staffToggleKey && isOn(staffToggleKey) && staffTitle) {
+      // Notify all assigned staff members
+      const staffIds = (appointment.items || [])
+        .flatMap((item) => (item.assignedStaff || []).map((s) => s.userSalonId));
+      const uniqueStaffIds = [...new Set(staffIds)];
+      await Promise.allSettled(
+        uniqueStaffIds.map((userSalonId) =>
+          createStaffNotification({
+            salonId,
+            userSalonId,
+            title: staffTitle,
+            message: staffMessage || staffTitle,
+            type: "APPOINTMENT",
+            linkUrl: `/admin/appointments/${appointmentId}`
+          })
+        )
+      );
+    }
+  } catch (err) {
+    console.error("[dispatchAppointmentEvent] Error:", err.message);
+  }
 };
 
 export const registerAppointmentRoutes = (ownerRouter) => {
@@ -144,7 +215,17 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       });
 
       const created = await fetchAppointment(req.salonId, createdId);
-      await sendAppointmentTemplateEmail(req.salonId, createdId, "appointment_confirmation");
+      // Dispatch: confirm email to customer + notify owner + notify assigned staff
+      void dispatchAppointmentEvent(req.salonId, createdId, {
+        toggleKey: "appointmentConfirmedToCustomer",
+        templateType: "appointment_confirmation",
+        ownerToggleKey: body.bookingChannel === "ONLINE" ? "onlineAppointmentBookedToOwner" : "appointmentCreatedToOwner",
+        ownerTitle: body.bookingChannel === "ONLINE" ? "New Online Appointment Booked" : "New Appointment Created",
+        ownerMessage: `A new appointment has been booked for ${new Date(body.startAt).toLocaleString()}.`,
+        staffToggleKey: "appointmentMsgToStaff",
+        staffTitle: "New Appointment Assigned",
+        staffMessage: `You have a new appointment on ${new Date(body.startAt).toLocaleString()}.`
+      });
       res.status(201).json(created);
     } catch (error) {
       return sendRouteError(res, error, "Could not create appointment");
@@ -207,7 +288,13 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       });
 
       const updated = await fetchAppointment(req.salonId, existing.id);
-      await sendAppointmentTemplateEmail(req.salonId, existing.id, "appointment_confirmation");
+      void dispatchAppointmentEvent(req.salonId, existing.id, {
+        toggleKey: "appointmentConfirmedToCustomer",
+        templateType: "appointment_confirmation",
+        staffToggleKey: "appointmentMsgToStaff",
+        staffTitle: "Appointment Updated",
+        staffMessage: `Your appointment has been updated for ${new Date(req.body.startAt).toLocaleString()}.`
+      });
       res.json(updated);
     } catch (error) {
       return sendRouteError(res, error, "Could not update appointment");
@@ -246,16 +333,32 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       await logAppointmentChange(tx, appointment.id, req.user.id, "STATUS_CHANGED", appointment.status, req.body.status, req.body.note || null);
     });
     if (req.body.status === "CONFIRMED") {
-      await sendAppointmentTemplateEmail(req.salonId, appointment.id, "appointment_confirmation");
-    } else if (req.body.status === "CANCELLED") {
-      await sendAppointmentTemplateEmail(req.salonId, appointment.id, "appointment_cancelled");
-    } else if (req.body.status === "COMPLETED") {
-      await maybeSendFeedbackRequestForAppointment({
-        salonId: req.salonId,
-        appointmentId: appointment.id,
-        actorUserId: req.user.userId,
-        actorMembershipId: req.user.membershipId
+      void dispatchAppointmentEvent(req.salonId, appointment.id, {
+        toggleKey: "appointmentConfirmedToCustomer",
+        templateType: "appointment_confirmation",
+        staffToggleKey: "appointmentMsgToStaff",
+        staffTitle: "Appointment Confirmed",
+        staffMessage: `An appointment has been confirmed.`
       });
+    } else if (req.body.status === "CANCELLED") {
+      void dispatchAppointmentEvent(req.salonId, appointment.id, {
+        toggleKey: "appointmentCancelledToCustomer",
+        templateType: "appointment_cancelled",
+        ownerToggleKey: "appointmentCancelledToOwner",
+        ownerTitle: "Appointment Cancelled",
+        ownerMessage: `An appointment has been cancelled by status update.`
+      });
+    } else if (req.body.status === "COMPLETED") {
+      // Check appointmentFeedbackLink toggle before sending feedback email
+      const { isOn } = await getNotificationToggles(req.salonId, appointment.branchId);
+      if (isOn("appointmentFeedbackLink")) {
+        await maybeSendFeedbackRequestForAppointment({
+          salonId: req.salonId,
+          appointmentId: appointment.id,
+          actorUserId: req.user.userId,
+          actorMembershipId: req.user.membershipId
+        });
+      }
     }
     res.json(await fetchAppointment(req.salonId, appointment.id));
   });
@@ -271,7 +374,13 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       await logAppointmentChange(tx, appointment.id, req.user.id, "CANCELLED", appointment.status, "CANCELLED", req.body.note || "Appointment cancelled");
     });
 
-    await sendAppointmentTemplateEmail(req.salonId, appointment.id, "appointment_cancelled");
+    void dispatchAppointmentEvent(req.salonId, appointment.id, {
+      toggleKey: "appointmentCancelledToCustomer",
+      templateType: "appointment_cancelled",
+      ownerToggleKey: "appointmentCancelledToOwner",
+      ownerTitle: "Appointment Cancelled",
+      ownerMessage: `An appointment has been cancelled.`
+    });
     res.json(await fetchAppointment(req.salonId, appointment.id));
   });
 
@@ -329,7 +438,13 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       });
 
       const updated = await fetchAppointment(req.salonId, appointment.id);
-      await sendAppointmentTemplateEmail(req.salonId, appointment.id, "appointment_confirmation");
+      void dispatchAppointmentEvent(req.salonId, appointment.id, {
+        toggleKey: "appointmentRescheduledToCustomer",
+        templateType: "appointment_confirmation",
+        staffToggleKey: "appointmentMsgToStaff",
+        staffTitle: "Appointment Rescheduled",
+        staffMessage: `Your appointment has been rescheduled to ${new Date(req.body.startAt).toLocaleString()}.`
+      });
       res.json(updated);
     } catch (error) {
       return sendRouteError(res, error, "Could not reschedule appointment");

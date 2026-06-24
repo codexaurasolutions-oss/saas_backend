@@ -4,6 +4,7 @@ import { registerInventoryRoutes } from "./inventory.js";
 import { registerMembershipRoutes } from "./memberships.js";
 import { registerMyPageRoutes } from "./my-pages.js";
 import { registerOwnerReportRoutes } from "./owner-reports.js";
+import { registerSettingsModelRoutes } from "./settings-models.js";
 
 export const registerPhase2OwnerRoutes = (ownerRouter) => {
   registerAppointmentRoutes(ownerRouter);
@@ -12,4 +13,5 @@ export const registerPhase2OwnerRoutes = (ownerRouter) => {
   registerMembershipRoutes(ownerRouter);
   registerMyPageRoutes(ownerRouter);
   registerOwnerReportRoutes(ownerRouter);
+  registerSettingsModelRoutes(ownerRouter);
 };

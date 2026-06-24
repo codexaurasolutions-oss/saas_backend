@@ -813,9 +813,47 @@ ownerRouter.post("/customers", requireSalonPermission("customers", "create"), va
   const duplicate = await prisma.customer.findFirst({ where: { salonId: req.salonId, phone: req.body.phone } });
   if (duplicate) return res.status(400).json({ message: "Customer with this phone already exists in this salon" });
   if (req.body.branchId) await ensureBranch(req.salonId, req.body.branchId);
-  res.status(201).json(await prisma.customer.create({
+  const customer = await prisma.customer.create({
     data: buildCustomerData(req.body, req.salonId)
-  }));
+  });
+
+  // ── Wire referralCodeSMS toggle ────────────────────────────────────────────
+  try {
+    const setting = await prisma.salonSetting.findFirst({
+      where: { salonId: req.salonId, branchId: null }
+    });
+    const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
+    const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+
+    if (toggles.referralCodeSMS !== false) {
+      const namePart = (customer.name || "GUEST").trim().split(" ")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+      const phonePart = (customer.phone || "0000").replace(/[^0-9]/g, "").slice(-4);
+      const referralCode = `${namePart}${phonePart}`;
+
+      await prisma.customerNotification.create({
+        data: {
+          salonId: req.salonId,
+          customerId: customer.id,
+          title: "🎁 Your Referral Code",
+          message: `Share your referral code "${referralCode}" with friends! Both of you get rewarded when they visit us.`
+        }
+      }).catch(() => {});
+
+      if (emailEnabled && customer.email) {
+        const { attemptCustomerTemplateEmail } = await import("../../../lib/emailNotifications.js");
+        await attemptCustomerTemplateEmail({
+          salonId: req.salonId,
+          toEmail: customer.email,
+          templateType: "referral_code_sms",
+          context: { customerId: customer.id, referralCode }
+        }).catch(() => {});
+      }
+    }
+  } catch (referralErr) {
+    console.error("[owner/customers] Referral code notification error (non-blocking):", referralErr.message);
+  }
+
+  res.status(201).json(customer);
 });
 ownerRouter.patch("/customers/:id", requireSalonPermission("customers", "edit"), validate(schemas.customerPatch), updateCustomerHandler);
 ownerRouter.put("/customers/:id", requireSalonPermission("customers", "edit"), validate(schemas.customerPatch), updateCustomerHandler);
@@ -1244,6 +1282,69 @@ ownerRouter.get("/settings", requireSalonPermission("settings", "view"), async (
   res.json(row);
 });
 
+// ---- Tax Rates CRUD (stored in SalonSetting.advancedSettings.taxMapping) ----
+const getTaxMapping = async (salonId) => {
+  const row = await prisma.salonSetting.findFirst({ where: { salonId, branchId: null } });
+  return row?.advancedSettings?.taxMapping || { inclusiveTax: false, rates: [] };
+};
+const setTaxMapping = async (salonId, taxMapping) => {
+  const existing = await prisma.salonSetting.findFirst({ where: { salonId, branchId: null } });
+  const advancedSettings = { ...(existing?.advancedSettings || {}), taxMapping };
+  if (existing) {
+    await prisma.salonSetting.update({ where: { id: existing.id }, data: { advancedSettings } });
+  } else {
+    await prisma.salonSetting.create({ data: { salonId, branchId: null, advancedSettings } });
+  }
+};
+
+ownerRouter.get("/settings/tax-rates", requireSalonPermission("settings", "view"), async (req, res) => {
+  const taxMapping = await getTaxMapping(req.salonId);
+  res.json(taxMapping);
+});
+
+ownerRouter.post("/settings/tax-rates", requireSalonPermission("settings", "edit"), async (req, res) => {
+  if (!req.body?.label || req.body?.rate === undefined) {
+    return res.status(400).json({ message: "label and rate are required" });
+  }
+  const taxMapping = await getTaxMapping(req.salonId);
+  const newRate = {
+    id: `tax_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    label: String(req.body.label),
+    code: String(req.body.code || req.body.label.toUpperCase().replace(/\s+/g, "").slice(0, 8)),
+    rate: Number(req.body.rate),
+    active: req.body.active !== false,
+    applicableFor: Array.isArray(req.body.applicableFor) ? req.body.applicableFor : ["SERVICE", "PRODUCT", "MEMBERSHIP", "PACKAGE"]
+  };
+  const next = { ...taxMapping, rates: [...(taxMapping.rates || []), newRate] };
+  await setTaxMapping(req.salonId, next);
+  res.status(201).json(newRate);
+});
+
+ownerRouter.patch("/settings/tax-rates/:id", requireSalonPermission("settings", "edit"), async (req, res) => {
+  const taxMapping = await getTaxMapping(req.salonId);
+  const rates = taxMapping.rates || [];
+  const idx = rates.findIndex((r) => r.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ message: "Tax rate not found" });
+  const updated = {
+    ...rates[idx],
+    ...(req.body.label !== undefined ? { label: String(req.body.label) } : {}),
+    ...(req.body.code !== undefined ? { code: String(req.body.code) } : {}),
+    ...(req.body.rate !== undefined ? { rate: Number(req.body.rate) } : {}),
+    ...(req.body.active !== undefined ? { active: Boolean(req.body.active) } : {}),
+    ...(Array.isArray(req.body.applicableFor) ? { applicableFor: req.body.applicableFor } : {})
+  };
+  const nextRates = rates.map((r, i) => (i === idx ? updated : r));
+  await setTaxMapping(req.salonId, { ...taxMapping, rates: nextRates });
+  res.json(updated);
+});
+
+ownerRouter.delete("/settings/tax-rates/:id", requireSalonPermission("settings", "edit"), async (req, res) => {
+  const taxMapping = await getTaxMapping(req.salonId);
+  const rates = (taxMapping.rates || []).filter((r) => r.id !== req.params.id);
+  await setTaxMapping(req.salonId, { ...taxMapping, rates });
+  res.json({ success: true });
+});
+
 ownerRouter.post("/settings/crm-segment-preview", requireSalonPermission("settings", "view"), async (req, res) => {
   const segments = req.body.segments || [];
   const preview = {};
@@ -1475,10 +1576,6 @@ ownerRouter.get("/reports/trends", requireSalonPermission("reports", "view"), as
 registerPhase2OwnerRoutes(ownerRouter);
 registerPhase3OwnerRoutes(ownerRouter);
 registerPhase4OwnerRoutes(ownerRouter);
-
-ownerRouter.post("/settings/crm-segment-preview", requireSalonPermission("settings", "view"), async (req, res) => {
-  res.json({ count: 0, sample: [] });
-});
 
 ownerRouter.get("/expenses/accounts", requireSalonPermission("expenses", "view"), async (req, res) => {
   res.json({ injections: [] });

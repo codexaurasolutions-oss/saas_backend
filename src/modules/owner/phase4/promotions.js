@@ -184,6 +184,42 @@ export const registerPromotionRoutes = (ownerRouter) => {
       reference: row.code,
       summary: `Gift card ${row.code} created`
     });
+
+    // ── Wire giftCard toggle (issuance notification) ───────────────────────
+    if (row.issuedToCustomerId) {
+      try {
+        const setting = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
+        const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
+        const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+
+        if (toggles.giftCard !== false) {
+          await prisma.customerNotification.create({
+            data: {
+              salonId: req.salonId,
+              customerId: row.issuedToCustomerId,
+              title: "\uD83C\uDF81 Gift Card Received!",
+              message: `You have received a gift card "${row.title}" worth \u20B9${row.balanceAmount}. Code: ${row.code}.`
+            }
+          }).catch(() => {});
+
+          if (emailEnabled) {
+            const recipient = await prisma.customer.findUnique({ where: { id: row.issuedToCustomerId }, select: { email: true } });
+            if (recipient?.email) {
+              const { attemptCustomerTemplateEmail } = await import("../../../lib/emailNotifications.js");
+              await attemptCustomerTemplateEmail({
+                salonId: req.salonId,
+                toEmail: recipient.email,
+                templateType: "gift_card_issued",
+                context: { customerId: row.issuedToCustomerId, giftCardCode: row.code, giftCardAmount: row.balanceAmount }
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch (notifyErr) {
+        console.error("[promotions] Gift card issuance notification error (non-blocking):", notifyErr.message);
+      }
+    }
+
     res.status(201).json(row);
   });
 
@@ -278,6 +314,47 @@ export const registerPromotionRoutes = (ownerRouter) => {
       entityId: result.redemption.id,
       summary: `Gift card redeemed for ${req.body.amountUsed}`
     });
+
+    // ── Wire giftCard toggle (redemption notification) ────────────────────
+    if (result.redemption.customerId) {
+      try {
+        const setting = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
+        const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
+        const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+
+        if (toggles.giftCard !== false) {
+          await prisma.customerNotification.create({
+            data: {
+              salonId: req.salonId,
+              customerId: result.redemption.customerId,
+              title: "\uD83D\uDED8 Gift Card Used",
+              message: `Your gift card (${result.updated.code}) was used for \u20B9${req.body.amountUsed}. Remaining balance: \u20B9${result.updated.balanceAmount}.`
+            }
+          }).catch(() => {});
+
+          if (emailEnabled) {
+            const recipient = await prisma.customer.findUnique({ where: { id: result.redemption.customerId }, select: { email: true } });
+            if (recipient?.email) {
+              const { attemptCustomerTemplateEmail } = await import("../../../lib/emailNotifications.js");
+              await attemptCustomerTemplateEmail({
+                salonId: req.salonId,
+                toEmail: recipient.email,
+                templateType: "gift_card_redeemed_template",
+                context: {
+                  customerId: result.redemption.customerId,
+                  giftCardCode: result.updated.code,
+                  amountUsed: req.body.amountUsed,
+                  balanceAmount: result.updated.balanceAmount
+                }
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch (notifyErr) {
+        console.error("[promotions] Gift card redemption notification error (non-blocking):", notifyErr.message);
+      }
+    }
+
     res.status(201).json({ ok: true, giftCard: result.updated, redemption: result.redemption });
   });
 

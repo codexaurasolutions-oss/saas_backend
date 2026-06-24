@@ -50,3 +50,33 @@ export const requireCustomerAuth = (req, res, next) => {
   }
   next();
 };
+
+// ---- Access Control policy middleware ----
+// Reads toggles from req.user.accessControlSettings (loaded by authMiddleware
+// from SalonSetting.advancedSettings.accessControl). Each helper short-circuits
+// to `next()` for SALON_OWNER / SUPER_ADMIN so the owner is never blocked by
+// their own policy.
+const isOwnerOrAdmin = (req) => req.user?.systemRole === "SUPER_ADMIN" || req.user?.systemRole === "SALON_OWNER";
+const acFlag = (req, key, fallback = true) => {
+  const ac = req.user?.accessControlSettings || {};
+  const value = ac[key];
+  return value === undefined ? fallback : Boolean(value);
+};
+
+export const requireStaffExportEnabled = (req, res, next) => {
+  if (isOwnerOrAdmin(req)) return next();
+  if (!acFlag(req, "allowStaffExport", true)) {
+    return res.status(403).json({ message: "Staff export is disabled in access control settings" });
+  }
+  next();
+};
+
+export const requireRosterOverrideEnabled = (req, res, next) => {
+  if (isOwnerOrAdmin(req)) return next();
+  if (!acFlag(req, "allowRosterOverrides", true)) {
+    return res.status(403).json({ message: "Roster overrides are disabled in access control settings" });
+  }
+  next();
+};
+
+export const getAccessControlSettings = (req) => req.user?.accessControlSettings || {};

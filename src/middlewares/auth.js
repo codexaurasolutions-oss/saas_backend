@@ -44,7 +44,7 @@ export const authMiddleware = async (req, res, next) => {
       }
     }
 
-    const [salon, subscription] = resolvedSalonId
+    const [salon, subscription, salonSettings] = resolvedSalonId
       ? await Promise.all([
           prisma.salon.findUnique({
             where: { id: resolvedSalonId },
@@ -54,14 +54,21 @@ export const authMiddleware = async (req, res, next) => {
             where: { salonId: resolvedSalonId, status: { in: ["ACTIVE", "TRIAL"] } },
             include: { plan: true },
             orderBy: { endsAt: "desc" }
+          }),
+          prisma.salonSetting.findFirst({
+            where: { salonId: resolvedSalonId, branchId: null },
+            select: { advancedSettings: true }
           })
         ])
-      : [null, null];
+      : [null, null, null];
 
     const mergedFeatureFlags = {
       ...(subscription?.plan?.featureFlags || {}),
       ...(salon?.featureFlags || {})
     };
+    const accessControlSettings = (salonSettings?.advancedSettings && typeof salonSettings.advancedSettings === "object")
+      ? (salonSettings.advancedSettings.accessControl || {})
+      : {};
     const mergedPermissions = membership
       ? membership.salonRole === "SALON_OWNER"
         ? { ...defaultOwnerPermissions, ...(membership.permissions || {}) }
@@ -80,6 +87,7 @@ export const authMiddleware = async (req, res, next) => {
       salonRole: membership?.salonRole || null,
       permissions: mergedPermissions,
       featureFlags: mergedFeatureFlags,
+      accessControlSettings,
       plan: subscription?.plan
         ? {
             id: subscription.plan.id,

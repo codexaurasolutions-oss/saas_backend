@@ -304,6 +304,14 @@ model Salon {
   whatsappSettings    WhatsAppSetting[]
   whatsappAutomations WhatsAppAutomation[]
   whatsappLogs        WhatsAppLog[]
+  shifts              Shift[]
+  taxRates            TaxRate[]
+  feedbackTypes       FeedbackType[]
+  designations        Designation[]
+  referralRule        ReferralRule?
+  referralCodes       ReferralCode[]
+  taxSlabs            TaxSlab[]
+  pnlCategories       PnlCategory[]
 }
 
 model UserSalon {
@@ -552,6 +560,8 @@ model Customer {
   enquiries           Enquiry[]             @relation("EnquiryConvertedCustomer")
   campaignConversions CampaignConversion[]
   whatsappLogs        WhatsAppLog[]
+  referralCodes       ReferralCode[]
+  referralReferees    ReferralCode[]       @relation("ReferralReferee")
 
   @@unique([salonId, phone])
 }
@@ -810,6 +820,7 @@ model Product {
   reconciliationItems StockReconciliationItem[]
   orderItems         OnlineOrderItem[]
   coupons            Coupon[]
+  vendorItems        VendorItem[]
 
   @@unique([salonId, sku])
 }
@@ -834,20 +845,42 @@ model StockMovement {
 }
 
 model Vendor {
-  id             String          @id @default(cuid())
-  salonId        String
-  branchId       String?
-  name           String
-  phone          String?
-  email          String?
-  address        String?
-  notes          String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  salon          Salon           @relation(fields: [salonId], references: [id])
-  branch         Branch?         @relation(fields: [branchId], references: [id])
-  purchaseOrders PurchaseOrder[]
-  expenses       Expense[]
+  id              String          @id @default(cuid())
+  salonId         String
+  branchId        String?
+  name            String
+  firmName        String?
+  phone           String?
+  alternateMobile String?
+  email           String?
+  gstNumber       String?
+  address         String?
+  area            String?
+  landmark        String?
+  city            String?
+  pincode         String?
+  notes           String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  salon           Salon           @relation(fields: [salonId], references: [id])
+  branch          Branch?         @relation(fields: [branchId], references: [id])
+  purchaseOrders  PurchaseOrder[]
+  expenses        Expense[]
+  vendorItems     VendorItem[]
+}
+
+model VendorItem {
+  id        String   @id @default(cuid())
+  vendorId  String
+  productId String
+  price     Decimal  @db.Decimal(10, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([vendorId, productId])
 }
 
 model PurchaseOrder {
@@ -1887,4 +1920,169 @@ model WhatsAppLog {
   customer          Customer?         @relation(fields: [customerId], references: [id])
   actorMembership   UserSalon?        @relation("WhatsAppLogActor", fields: [actorMembershipId], references: [id])
   campaign          Campaign?         @relation(fields: [campaignId], references: [id])
+}
+
+// =================== Settings Models (added to back dead JSON metadata) ===================
+
+// Shift Management - replaces shiftManagement JSON
+model Shift {
+  id              String     @id @default(cuid())
+  salonId         String
+  name            String
+  active          Boolean    @default(true)
+  sameForAllDays  Boolean    @default(true)
+  startTime       String?    // "HH:MM" - used when sameForAllDays=true
+  endTime         String?
+  breakLabel      String?
+  sortOrder       Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  salon           Salon      @relation(fields: [salonId], references: [id])
+  days            ShiftDay[]
+  breaks          ShiftBreak[]
+
+  @@index([salonId])
+}
+
+model ShiftDay {
+  id        String   @id @default(cuid())
+  shiftId   String
+  dayOfWeek Int      // 0=Sunday ... 6=Saturday
+  active    Boolean  @default(true)
+  startTime String   // "HH:MM"
+  endTime   String   // "HH:MM"
+  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, dayOfWeek])
+}
+
+model ShiftBreak {
+  id        String   @id @default(cuid())
+  shiftId   String
+  name      String
+  active    Boolean  @default(true)
+  fromTime  String   // "HH:MM"
+  toTime    String   // "HH:MM"
+  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+}
+
+// Tax Rate - replaces taxMapping.rates JSON
+model TaxRate {
+  id             String   @id @default(cuid())
+  salonId        String
+  label          String
+  code           String
+  rate           Decimal  @db.Decimal(5, 2)
+  active         Boolean  @default(true)
+  applicableFor  String   @default("SERVICE,PRODUCT,MEMBERSHIP,PACKAGE")
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  salon          Salon    @relation(fields: [salonId], references: [id])
+
+  @@unique([salonId, code])
+  @@index([salonId])
+}
+
+// Feedback Type - replaces feedbackSetting.types JSON
+model FeedbackType {
+  id          String   @id @default(cuid())
+  salonId     String
+  slug        String
+  name        String
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  salon       Salon    @relation(fields: [salonId], references: [id])
+
+  @@unique([salonId, slug])
+  @@index([salonId])
+}
+
+// Designation - replaces designations JSON
+model Designation {
+  id          String   @id @default(cuid())
+  salonId     String
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  salon       Salon    @relation(fields: [salonId], references: [id])
+
+  @@unique([salonId, name])
+  @@index([salonId])
+}
+
+// Referral Rule - replaces referralSettings JSON
+model ReferralRule {
+  id                          String   @id @default(cuid())
+  salonId                     String   @unique
+  enabled                     Boolean  @default(false)
+  maxReferLimit               Int      @default(1000)
+  referrerMaxBenefitAmount    Decimal  @default(0) @db.Decimal(10, 2)
+  referrerFixedAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  referrerPercentage          Decimal  @default(0) @db.Decimal(5, 2)
+  referredMaxBenefitAmount    Decimal  @default(0) @db.Decimal(10, 2)
+  referredFixedAmount         Decimal  @default(0) @db.Decimal(10, 2)
+  referredPercentage          Decimal  @default(0) @db.Decimal(5, 2)
+  notes                       String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  salon                       Salon    @relation(fields: [salonId], references: [id])
+}
+
+// Referral Code - tracks issued referral codes per customer
+model ReferralCode {
+  id              String   @id @default(cuid())
+  salonId         String
+  customerId      String
+  code            String
+  refereeId       String?  // customer who used the code
+  redeemedAt      DateTime?
+  status          String   @default("ACTIVE")  // ACTIVE, REDEEMED, EXPIRED
+  referrerReward  Decimal  @default(0) @db.Decimal(10, 2)
+  refereeReward   Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  salon           Salon    @relation(fields: [salonId], references: [id])
+  customer        Customer @relation(fields: [customerId], references: [id])
+  referee         Customer? @relation("ReferralReferee", fields: [refereeId], references: [id])
+
+  @@unique([salonId, code])
+  @@index([salonId, customerId])
+}
+
+// Tax Slab (PNL Income Tax) - replaces pnlIncomeTaxes JSON
+model TaxSlab {
+  id        String   @id @default(cuid())
+  salonId   String
+  name      String
+  slabFrom  Decimal  @db.Decimal(12, 2)
+  slabTo    Decimal  @db.Decimal(12, 2)
+  rate      Decimal  @db.Decimal(5, 2)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  salon     Salon    @relation(fields: [salonId], references: [id])
+
+  @@index([salonId])
+}
+
+// PNL Category - replaces pnlCategories JSON
+model PnlCategory {
+  id            String   @id @default(cuid())
+  salonId       String
+  name          String
+  type          String   // INCOME, EXPENSE
+  sequenceNumber Int     @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  salon         Salon    @relation(fields: [salonId], references: [id])
+
+  @@index([salonId])
 }

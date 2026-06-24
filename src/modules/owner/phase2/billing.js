@@ -1,8 +1,9 @@
 import PDFDocument from "pdfkit";
+import { getNotificationToggles } from "../../../lib/emailAutomation.js";
 import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
 import { prisma } from "../../../lib/prisma.js";
 import { addInvoicePayment, createPosInvoice, generatePaymentLink, getDayClosingSummary, logPaymentLinkPlaceholder, refundInvoice } from "../../../lib/pos.js";
-import { reverseInvoiceLoyalty } from "../../../lib/phase4.js";
+import { reverseInvoiceLoyalty, createStaffNotification, createCustomerNotification } from "../../../lib/phase4.js";
 import { attachBranchStock, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -25,12 +26,41 @@ const attachSalonSettings = async (req, res, next) => {
 const sendInvoiceAutomationEmails = async (salonId, invoice) => {
   const customerId = invoice?.customerId || null;
   const toEmail = invoice?.customer?.email || "";
-  await attemptCustomerTemplateEmail({
-    salonId,
-    toEmail,
-    templateType: "invoice_template",
-    context: { invoiceId: invoice?.id, customerId }
-  });
+  const branchId = invoice?.branchId || null;
+
+  const { isOn, emailEnabled } = await getNotificationToggles(salonId, branchId).catch(() => ({ isOn: () => true, emailEnabled: true }));
+
+  // Invoice email (advanceReceivedInvoice toggle)
+  if (isOn("advanceReceivedInvoice") && emailEnabled && toEmail) {
+    await attemptCustomerTemplateEmail({
+      salonId,
+      toEmail,
+      templateType: "invoice_template",
+      context: { invoiceId: invoice?.id, customerId }
+    }).catch(() => {});
+  }
+
+  // Owner in-app notification (balanceClearedInvoice toggle)
+  if (isOn("balanceClearedInvoice") && invoice?.status === "PAID") {
+    await createStaffNotification({
+      salonId,
+      userSalonId: null,
+      title: "Invoice Paid",
+      message: `Invoice ${invoice.invoiceNumber || ""} has been fully paid.`,
+      type: "INVOICE",
+      linkUrl: `/admin/invoices/${invoice.id}`
+    }).catch(() => {});
+  }
+
+  // Customer in-app notification
+  if (customerId) {
+    await createCustomerNotification({
+      salonId,
+      customerId,
+      title: "Your Invoice",
+      message: `Your invoice ${invoice.invoiceNumber || ""} has been created. Total: ${invoice.total || 0}.`
+    }).catch(() => {});
+  }
 
   const [soldMemberships, soldPackages] = await Promise.all([
     prisma.customerMembership.findMany({
@@ -44,29 +74,51 @@ const sendInvoiceAutomationEmails = async (salonId, invoice) => {
   ]);
 
   for (const membership of soldMemberships) {
-    await attemptCustomerTemplateEmail({
-      salonId,
-      toEmail: membership.customer?.email || toEmail,
-      templateType: "membership_purchase_template",
-      context: {
+    if (isOn("membershipPurchase") && emailEnabled) {
+      await attemptCustomerTemplateEmail({
+        salonId,
+        toEmail: membership.customer?.email || toEmail,
+        templateType: "membership_purchase_template",
+        context: {
+          customerId: membership.customerId,
+          customerMembershipId: membership.id,
+          invoiceId: invoice?.id
+        }
+      }).catch(() => {});
+    }
+    // In-app
+    if (isOn("membershipPurchase") && membership.customerId) {
+      await createCustomerNotification({
+        salonId,
         customerId: membership.customerId,
-        customerMembershipId: membership.id,
-        invoiceId: invoice?.id
-      }
-    });
+        title: "Membership Activated",
+        message: `Your membership "${membership.membershipPlan?.name || ""}" is now active.`
+      }).catch(() => {});
+    }
   }
 
   for (const customerPackage of soldPackages) {
-    await attemptCustomerTemplateEmail({
-      salonId,
-      toEmail: customerPackage.customer?.email || toEmail,
-      templateType: "package_purchase_template",
-      context: {
+    if (isOn("packagePurchase") && emailEnabled) {
+      await attemptCustomerTemplateEmail({
+        salonId,
+        toEmail: customerPackage.customer?.email || toEmail,
+        templateType: "package_purchase_template",
+        context: {
+          customerId: customerPackage.customerId,
+          customerPackageId: customerPackage.id,
+          invoiceId: invoice?.id
+        }
+      }).catch(() => {});
+    }
+    // In-app
+    if (isOn("packagePurchase") && customerPackage.customerId) {
+      await createCustomerNotification({
+        salonId,
         customerId: customerPackage.customerId,
-        customerPackageId: customerPackage.id,
-        invoiceId: invoice?.id
-      }
-    });
+        title: "Package Activated",
+        message: `Your package "${customerPackage.package?.name || ""}" is now active.`
+      }).catch(() => {});
+    }
   }
 };
 

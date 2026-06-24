@@ -609,12 +609,22 @@ export const resolveTemplateContext = async (salonId, context = {}) => {
     salon_name: salon?.name || templateFallbacks.salon_name,
     appointment_date_time: appointment?.startAt ? new Date(appointment.startAt).toLocaleString() : templateFallbacks.appointment_date_time,
     invoice_amount: invoice ? Number(invoice.total || 0).toFixed(2) : templateFallbacks.invoice_amount,
-    membership_expiry: membership?.endsAt ? new Date(membership.endsAt).toLocaleDateString() : templateFallbacks.membership_expiry,
+    membership_expiry: resolvedCustomer?.memberships?.[0]?.endsAt ? new Date(resolvedCustomer.memberships[0].endsAt).toLocaleDateString() : (membership?.endsAt ? new Date(membership.endsAt).toLocaleDateString() : templateFallbacks.membership_expiry),
     package_balance: pack?.remainingSessions != null ? String(pack.remainingSessions) : templateFallbacks.package_balance,
     order_number: order?.orderNumber || templateFallbacks.order_number,
     order_amount: order ? Number(order.total || 0).toFixed(2) : templateFallbacks.order_amount,
     catalog_link: salon ? buildCatalogLink(salon.slug) : templateFallbacks.catalog_link,
-    payment_link: invoice?.paymentLinkToken ? `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/pay/${invoice.paymentLinkToken}` : templateFallbacks.payment_link
+    payment_link: invoice?.paymentLinkToken ? `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/pay/${invoice.paymentLinkToken}` : templateFallbacks.payment_link,
+    feedback_link: context.feedback_link || (appointment?.id ? `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/feedback?appointmentId=${appointment.id}` : (invoice?.id ? `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/feedback?invoiceId=${invoice.id}` : "")),
+    invoice_link: context.invoice_link || (invoice?.id ? `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/invoice/${invoice.id}` : (order?.invoiceId ? `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/invoice/${order.invoiceId}` : "")),
+    referral_code: context.referralCode || context.referral_code || "",
+    gift_card_code: context.giftCardCode || context.gift_card_code || "",
+    gift_card_amount: context.giftCardAmount != null ? String(context.giftCardAmount) : (context.gift_card_amount != null ? String(context.gift_card_amount) : ""),
+    points_earned: context.pointsEarned != null ? String(context.pointsEarned) : (context.points_earned != null ? String(context.points_earned) : ""),
+    new_balance: context.newBalance != null ? String(context.newBalance) : (context.new_balance != null ? String(context.new_balance) : ""),
+    amount_used: context.amountUsed != null ? String(context.amountUsed) : (context.amount_used != null ? String(context.amount_used) : ""),
+    balance_amount: context.balanceAmount != null ? String(context.balanceAmount) : (context.balance_amount != null ? String(context.balance_amount) : ""),
+    note: context.note || ""
   };
 
   return {
@@ -632,7 +642,16 @@ export const resolveTemplateContext = async (salonId, context = {}) => {
     orderNumber: resolved.order_number,
     orderAmount: resolved.order_amount,
     catalogLink: resolved.catalog_link,
-    paymentLink: resolved.payment_link
+    paymentLink: resolved.payment_link,
+    feedbackLink: resolved.feedback_link,
+    invoiceLink: resolved.invoice_link,
+    referralCode: resolved.referral_code,
+    giftCardCode: resolved.gift_card_code,
+    giftCardAmount: resolved.gift_card_amount,
+    pointsEarned: resolved.points_earned,
+    newBalance: resolved.new_balance,
+    amountUsed: resolved.amount_used,
+    balanceAmount: resolved.balance_amount
   };
 };
 

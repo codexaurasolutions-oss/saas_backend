@@ -182,6 +182,55 @@ export const registerInventoryRoutes = (ownerRouter) => {
     res.status(201).json(await prisma.vendor.create({ data: { salonId: req.salonId, ...req.body, branchId: req.body.branchId || null, email: req.body.email || null } }));
   });
 
+  ownerRouter.patch("/purchases/vendors/:id", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), validate(schemas.vendor), async (req, res) => {
+    const vendor = await prisma.vendor.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    if (!vendor) return res.status(404).json({ message: "Vendor not found" });
+    res.json(await prisma.vendor.update({
+      where: { id: vendor.id },
+      data: {
+        ...req.body,
+        branchId: req.body.branchId || null,
+        email: req.body.email || null
+      }
+    }));
+  });
+
+  ownerRouter.get("/purchases/vendors/:vendorId/items", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
+    res.json(await prisma.vendorItem.findMany({
+      where: { vendorId: req.params.vendorId },
+      include: { product: true },
+      orderBy: { createdAt: "desc" }
+    }));
+  });
+
+  ownerRouter.post("/purchases/vendors/:vendorId/items", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), validate(schemas.vendorItem), async (req, res) => {
+    res.status(201).json(await prisma.vendorItem.create({
+      data: {
+        vendorId: req.params.vendorId,
+        productId: req.body.productId,
+        price: req.body.price,
+        isActive: req.body.isActive !== false
+      }
+    }));
+  });
+
+  ownerRouter.patch("/purchases/vendor-items/:id", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), async (req, res) => {
+    res.json(await prisma.vendorItem.update({
+      where: { id: req.params.id },
+      data: {
+        price: req.body.price,
+        isActive: req.body.isActive !== false
+      }
+    }));
+  });
+
+  ownerRouter.delete("/purchases/vendor-items/:id", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), async (req, res) => {
+    await prisma.vendorItem.delete({
+      where: { id: req.params.id }
+    });
+    res.json({ success: true });
+  });
+
   ownerRouter.get("/purchases/orders", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
     res.json(await prisma.purchaseOrder.findMany({
       where: { salonId: req.salonId },
@@ -379,5 +428,35 @@ export const registerInventoryRoutes = (ownerRouter) => {
       return tx.stockReconciliation.findUnique({ where: { id: reconciliation.id }, include: { items: true } });
     });
     res.status(201).json(result);
+  });
+
+  ownerRouter.get("/inventory/top-selling-items", requireFeatureEnabled("inventory"), requireSalonPermission("inventory", "view"), async (req, res) => {
+    try {
+      const grouped = await prisma.invoiceItem.groupBy({
+        by: ['productId'],
+        where: {
+          itemType: 'PRODUCT',
+          productId: { not: null },
+          invoice: { salonId: req.salonId }
+        },
+        _sum: { qty: true },
+        orderBy: { _sum: { qty: 'desc' } },
+        take: 10
+      });
+
+      const productIds = grouped.map(g => g.productId).filter(Boolean);
+      const products = await prisma.product.findMany({
+        where: { id: { in: productIds } }
+      });
+      const productMap = Object.fromEntries(products.map(p => [p.id, p]));
+
+      res.json(grouped.map(g => ({
+        product: productMap[g.productId] || null,
+        totalSold: Number(g._sum.qty || 0)
+      })).filter(item => item.product));
+    } catch (err) {
+      console.error("Top selling items error:", err);
+      res.json([]);
+    }
   });
 };
