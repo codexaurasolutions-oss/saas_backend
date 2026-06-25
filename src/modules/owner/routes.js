@@ -1104,7 +1104,7 @@ ownerRouter.get("/users", requireSalonPermission("staff", "view"), async (req, r
     orderBy: { id: "desc" }
   }));
 });
-ownerRouter.get("/staff-users", async (req, res) => {
+ownerRouter.get("/staff-users", requireSalonPermission("staff", "view"), async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);
   const rows = await prisma.userSalon.findMany({
     where: { salonId: req.salonId, isArchived: false, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) },
@@ -1418,6 +1418,16 @@ ownerRouter.post("/settings/crm-segment-preview", requireSalonPermission("settin
 });
 ownerRouter.post("/settings", requireSalonPermission("settings", "edit"), validate(schemas.salonSettings), async (req, res) => {
   const branchId = req.body.branchId || null;
+  const existing = await prisma.salonSetting.findFirst({
+    where: { salonId: req.salonId, branchId }
+  });
+  
+  // Deep merge advancedSettings instead of overwriting
+  let advancedSettings = req.body.advancedSettings || null;
+  if (advancedSettings && existing?.advancedSettings) {
+    advancedSettings = { ...existing.advancedSettings, ...advancedSettings };
+  }
+  
   const payload = {
     invoicePrefix: req.body.invoicePrefix,
     invoiceFooter: req.body.invoiceFooter,
@@ -1428,12 +1438,9 @@ ownerRouter.post("/settings", requireSalonPermission("settings", "edit"), valida
     cancellationPolicy: req.body.cancellationPolicy || null,
     allowNegativeStock: Boolean(req.body.allowNegativeStock),
     paymentGatewaySettings: req.body.paymentGatewaySettings || null,
-    advancedSettings: req.body.advancedSettings || null,
+    advancedSettings,
     smsSettings: req.body.smsSettings || null
   };
-  const existing = await prisma.salonSetting.findFirst({
-    where: { salonId: req.salonId, branchId }
-  });
   const row = existing
     ? await prisma.salonSetting.update({
         where: { id: existing.id },

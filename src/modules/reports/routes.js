@@ -55,19 +55,19 @@ const buildInvoiceWhere = (req, branchId) => {
         }
       : {});
 
-  const itemsFilter = {};
-  if (stylistId) itemsFilter.staffUserSalonId = stylistId;
-  if (productId) itemsFilter.productId = productId;
-  if (serviceId) itemsFilter.serviceId = serviceId;
-
-  const useItemFilter = Object.keys(itemsFilter).length > 0;
+  const itemsFilters = [];
+  if (stylistId) itemsFilters.push({ staffUserSalonId: stylistId });
+  if (productId) itemsFilters.push({ productId });
+  if (serviceId) itemsFilters.push({ serviceId });
+  if (categoryId) itemsFilters.push({ product: { categoryId } });
+  if (isOwnScopedStaff(req, "reports")) {
+    itemsFilters.push({ staffUserSalonId: req.user.membershipId });
+  }
 
   return {
     salonId: req.salonId,
     ...(branchId ? { branchId } : {}),
-    ...(isOwnScopedStaff(req, "reports") ? { items: { some: { staffUserSalonId: req.user.membershipId } } } : {}),
-    ...(useItemFilter ? { items: { some: itemsFilter } } : {}),
-    ...(categoryId ? { items: { some: { product: { categoryId } } } } : {}),
+    ...(itemsFilters.length > 0 ? { items: { some: { AND: itemsFilters } } } : {}),
     ...(customerId ? { customerId } : {}),
     ...(status ? { status } : {}),
     ...dateFilter

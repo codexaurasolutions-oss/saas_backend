@@ -107,7 +107,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
         productType: req.body.productType,
         costPrice: req.body.costPrice,
         sellingPrice: req.body.sellingPrice,
-        minStock: req.body.minStock || 0,
+        minStock: req.body.minStock ?? product.minStock,
         expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
         allowNegativeStock: Boolean(req.body.allowNegativeStock)
       }
@@ -225,9 +225,11 @@ export const registerInventoryRoutes = (ownerRouter) => {
   });
 
   ownerRouter.delete("/purchases/vendor-items/:id", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "edit"), async (req, res) => {
-    await prisma.vendorItem.delete({
-      where: { id: req.params.id }
-    });
+    const vendorItem = await prisma.vendorItem.findFirst({ where: { id: req.params.id } });
+    if (!vendorItem) return res.status(404).json({ message: "Vendor item not found" });
+    const vendor = await prisma.vendor.findFirst({ where: { id: vendorItem.vendorId, salonId: req.salonId } });
+    if (!vendor) return res.status(404).json({ message: "Vendor item not found" });
+    await prisma.vendorItem.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   });
 
@@ -331,6 +333,9 @@ export const registerInventoryRoutes = (ownerRouter) => {
         const orderItem = order.items.find((entry) => entry.id === item.purchaseOrderItemId);
         if (!orderItem) throw new Error("Invalid purchase order item");
         const nextReceived = toAmount(orderItem.quantityReceived) + toAmount(item.quantityReceived);
+        if (nextReceived > toAmount(orderItem.quantityOrdered)) {
+          throw new Error(`Cannot receive more than ordered quantity for item ${orderItem.productId}. Ordered: ${orderItem.quantityOrdered}, already received: ${orderItem.quantityReceived}, attempting: ${item.quantityReceived}`);
+        }
         await tx.purchaseOrderItem.update({ where: { id: orderItem.id }, data: { quantityReceived: nextReceived } });
         await createStockMovement(tx, {
           salonId: req.salonId,

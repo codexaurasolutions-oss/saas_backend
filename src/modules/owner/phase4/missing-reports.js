@@ -471,7 +471,7 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   ownerRouter.get("/reports/guest-followups", requireFeatureEnabled("customers"), requireSalonPermission("customers", "view"), async (req, res) => {
     const customers = await prisma.customer.findMany({
       where: { salonId: req.salonId, lastVisitAt: { not: null } },
-      include: { timeline: { where: { type: "FOLLOW_UP" }, orderBy: { createdAt: "desc" }, take: 1 } },
+      include: { timeline: { where: { eventType: "FOLLOW_UP" }, orderBy: { createdAt: "desc" }, take: 1 } },
       orderBy: { lastVisitAt: "asc" },
       take: 200
     });
@@ -554,8 +554,9 @@ export const registerMissingReportRoutes = (ownerRouter) => {
 
   // ============ Consumable Tracking ============
   ownerRouter.get("/reports/consumable-tracking", requireFeatureEnabled("inventory"), requireSalonPermission("inventory", "view"), async (req, res) => {
+    const { startDate, endDate } = buildDateRange(req);
     const movements = await prisma.stockMovement.findMany({
-      where: { salonId: req.salonId, movementType: "CONSUMABLE_USAGE" },
+      where: { salonId: req.salonId, movementType: "CONSUMABLE_USAGE", createdAt: { gte: startDate, lte: endDate } },
       include: { product: true },
       orderBy: { createdAt: "desc" },
       take: 500
@@ -682,10 +683,11 @@ export const registerMissingReportRoutes = (ownerRouter) => {
     });
     const revenue = invoices.reduce((s, inv) => s + toAmount(inv.subtotal) - toAmount(inv.discount), 0);
 
-    // Cost of Sales: products sold (retail) + consumable goods used
+    // Cost of Sales: products sold use actual costPrice from Product table
     const productCogs = invoices.reduce((s, inv) => s + inv.items
-      .filter(i => i.itemType === "PRODUCT")
-      .reduce((a, i) => a + toAmount(i.qty || 1) * toAmount(i.unitPrice || 0) * 0.3, 0), 0);
+      .filter(i => i.itemType === "PRODUCT" && i.product)
+      .reduce((a, i) => a + toAmount(i.qty || 1) * toAmount(i.product?.costPrice || 0), 0), 0);
+    // Services: estimate consumable cost as a fraction of service revenue
     const consumableCogs = invoices.reduce((s, inv) => s + inv.items
       .filter(i => i.itemType === "SERVICE")
       .reduce((a, i) => a + toAmount(i.qty || 1) * toAmount(i.unitPrice || 0) * 0.05, 0), 0);
