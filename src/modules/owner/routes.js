@@ -1698,49 +1698,4 @@ ownerRouter.post("/expenses/accounts/injections", requireSalonPermission("expens
   res.status(201).json({ id: "inj_123", amount: req.body.amount });
 });
 
-ownerRouter.get("/customers/:id/advance-payments", requireSalonPermission("customers", "view"), async (req, res) => {
-  try {
-    const appointments = await prisma.appointment.findMany({
-      where: { salonId: req.salonId, customerId: req.params.id, advancePaidAmount: { gt: 0 } },
-      select: { id: true, advancePaidAmount: true, createdAt: true, status: true, note: true },
-      orderBy: { createdAt: "desc" }
-    });
-    res.json(appointments.map(a => ({
-      id: a.id,
-      amount: Number(a.advancePaidAmount),
-      mode: "Online",
-      remark: a.note || "",
-      createdAt: a.createdAt,
-      type: a.status === "CANCELLED" ? "refunded" : "advance"
-    })));
-  } catch (error) {
-    res.status(500).json({ error: "Failed to load advance payments" });
-  }
-});
 
-ownerRouter.post("/advance-payments", requireSalonPermission("customers", "create"), async (req, res) => {
-  try {
-    const { customerId, amount, mode, remark } = req.body;
-    if (!customerId || !amount) return res.status(400).json({ error: "customerId and amount are required" });
-    const numericAmount = Number(amount);
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return res.status(400).json({ error: "Invalid amount" });
-    const customer = await prisma.customer.findFirst({ where: { id: customerId, salonId: req.salonId } });
-    if (!customer) return res.status(404).json({ error: "Customer not found" });
-    const appointment = await prisma.appointment.create({
-      data: {
-        salonId: req.salonId,
-        customerId,
-        branchId: null,
-        startAt: new Date(),
-        endAt: new Date(),
-        status: "CONFIRMED",
-        advancePaidAmount: numericAmount,
-        advancePaymentRequired: true,
-        note: remark || `Advance payment: ${numericAmount} (${mode || "Online"})`
-      }
-    });
-    res.json({ id: appointment.id, amount: numericAmount, mode: mode || "Online", remark: remark || "", createdAt: appointment.createdAt });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create advance payment" });
-  }
-});
