@@ -556,18 +556,100 @@ reportsRouter.get("/product-sales", async (req, res) => {
       invoice: { is: buildInvoiceWhere(req, branchId) },
       ...(isOwnScopedStaff(req, "reports") ? { staffUserSalonId: req.user.membershipId } : {})
     },
-    include: { product: { include: { category: true } }, invoice: true }
+    include: {
+      product: { include: { category: true } },
+      invoice: { include: { customer: true, payments: true } },
+      staffUserSalon: { include: { user: true } }
+    },
+    orderBy: { id: "desc" }
   });
-  const grouped = {};
+
+  const productIds = [...new Set(rows.map(r => r.productId).filter(Boolean))];
+  const products = productIds.length > 0
+    ? await prisma.product.findMany({ where: { id: { in: productIds } }, include: { category: true } })
+    : [];
+  const productMap = {};
+  products.forEach(p => { productMap[p.id] = p; });
+
+  const group = (req.query.group || "none").toLowerCase();
+  const groupData = (req.query.groupData || "none").toLowerCase();
+
+  const grouped = new Map();
   rows.forEach((row) => {
-    const key = row.productId || row.serviceName;
-    if (!grouped[key]) grouped[key] = { productId: row.productId, "Product": row.product?.name || row.serviceName, "Category": row.product?.category?.name || "-", qty: 0, sales: 0 };
-    grouped[key].qty += Number(row.qty || 0);
-    grouped[key].sales += toAmount(row.lineTotal);
+    const product = productMap[row.productId] || row.product;
+    const productName = product?.name || row.serviceName || "Uncategorized Product";
+    const categoryName = product?.category?.name || "-";
+
+    let key;
+    if (group === "product") key = row.productId || `name:${productName}`;
+    else if (group === "service") return;
+    else key = row.id;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        firstRow: row,
+        productId: row.productId,
+        productName,
+        categoryName,
+        qty: 0,
+        sales: 0,
+        unitPrices: new Set(),
+        redemption: 0,
+        complimentary: 0,
+        tax: 0,
+        subtotal: 0,
+        groupDate: null,
+        groupCategory: categoryName
+      });
+    }
+    const acc = grouped.get(key);
+    acc.qty += Number(row.qty || 0);
+    const lineTotal = toAmount(row.lineTotal);
+    const unitPrice = toAmount(row.unitPrice);
+    acc.sales += lineTotal;
+    acc.unitPrices.add(unitPrice);
+    if (toAmount(row.invoice?.total) === 0) acc.complimentary += lineTotal;
+    acc.redemption += toAmount(row.membershipWalletUsed) + toAmount(row.packageSessionsUsed);
+    const taxAmt = toAmount(row.invoice?.tax) || (unitPrice * Number(row.qty || 0) * toAmount(row.taxPct) / 100);
+    acc.tax += taxAmt;
+    acc.subtotal += Math.max(0, lineTotal - taxAmt);
+    if (groupData === "date" && !acc.groupDate) {
+      acc.groupDate = new Date(row.invoice?.createdAt || Date.now()).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-");
+    }
   });
-  const result = Object.values(grouped).sort((a, b) => b.sales - a.sales);
-  const mapped = result.map(r => ({ ...r, "Qty": r.qty, "Sales": r.sales }));
-  res.json(appendTotalRow(mapped, "Product", "TOTAL", ["Qty", "Sales"]));
+
+  const result = Array.from(grouped.values());
+  if (group === "product") result.sort((a, b) => b.sales - a.sales);
+
+  const mapped = result.map((acc, idx) => {
+    const row = acc.firstRow;
+    const inv = row.invoice;
+    const dateObj = new Date(inv?.createdAt || Date.now());
+    const paymentModes = inv?.payments?.map(p => p.mode).filter(Boolean).join(", ") || "";
+    const unitPriceDisplay = acc.unitPrices.size === 1
+      ? Array.from(acc.unitPrices)[0]
+      : "Mixed";
+    return {
+      "SR. NO.": idx + 1,
+      "DATE": dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-"),
+      "TIME": dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+      "GUEST NAME": inv?.customer?.name || "Walk-in",
+      "GUEST NUMBER": inv?.customer?.phone || "-",
+      "INVOICE NO": inv?.invoiceNumber || "-",
+      "PRODUCT": acc.productName,
+      "CATEGORY": acc.categoryName,
+      "QTY": acc.qty,
+      "UNIT PRICE": unitPriceDisplay,
+      "COMPLIMENTARY": acc.complimentary,
+      "REDEMPTION AMOUNT": acc.redemption,
+      "TAX": acc.tax,
+      "SUBTOTAL": acc.subtotal,
+      "TOTAL": acc.sales,
+      "PAYMENT MODE": paymentModes
+    };
+  });
+
+  res.json(appendTotalRow(mapped, "PRODUCT", "TOTAL", ["QTY", "UNIT PRICE", "COMPLIMENTARY", "REDEMPTION AMOUNT", "TAX", "SUBTOTAL", "TOTAL"]));
 });
 
 reportsRouter.get("/service-sales", async (req, res) => {
