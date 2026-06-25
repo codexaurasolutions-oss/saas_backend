@@ -1112,11 +1112,17 @@ ownerRouter.get("/users", requireSalonPermission("staff", "view"), async (req, r
 });
 ownerRouter.get("/staff-users", async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);
-  res.json(await prisma.userSalon.findMany({
+  const rows = await prisma.userSalon.findMany({
     where: { salonId: req.salonId, isArchived: false, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) },
     include: { user: true, branch: true, customRole: true, serviceAssignments: { include: { service: true } } },
     orderBy: { id: "desc" }
-  }));
+  });
+  res.json(rows.map((row) => ({
+    ...row,
+    name: row.user?.name || "",
+    email: row.user?.email || "",
+    phone: row.user?.phone || row.phone || ""
+  })));
 });
 ownerRouter.get("/custom-roles", requireSalonPermission("staff", "view"), async (req, res) => {
   res.json(await prisma.customRole.findMany({ where: { salonId: req.salonId }, orderBy: { createdAt: "desc" } }));
