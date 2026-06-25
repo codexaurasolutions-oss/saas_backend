@@ -73,6 +73,8 @@ const buildReportFilters = (req) => {
     categoryId: req.query?.categoryId || null,
     customerId: req.query?.customerId || null,
     vendorId: req.query?.vendorId || null,
+    transactionId: req.query?.transactionId || null,
+    vendorInvoiceId: req.query?.vendorInvoiceId || null,
     status: req.query?.status || null
   };
 };
@@ -491,9 +493,16 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   // ============ Material Received (Purchase Orders Received) ============
   ownerRouter.get("/reports/material-received", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
     const { startDate, endDate } = buildDateRange(req);
-    const { vendorId, productId } = buildReportFilters(req);
+    const { vendorId, productId, transactionId, vendorInvoiceId } = buildReportFilters(req);
     const orders = await prisma.purchaseOrder.findMany({
-      where: { salonId: req.salonId, status: { in: ["RECEIVED", "PARTIALLY_RECEIVED"] }, receivedAt: { gte: startDate, lte: endDate }, ...(vendorId ? { vendorId } : {}) },
+      where: {
+        salonId: req.salonId,
+        status: { in: ["RECEIVED", "PARTIALLY_RECEIVED"] },
+        receivedAt: { gte: startDate, lte: endDate },
+        ...(vendorId ? { vendorId } : {}),
+        ...(transactionId ? { OR: [{ transactionId: { contains: transactionId, mode: "insensitive" } }, { orderNumber: { contains: transactionId, mode: "insensitive" } }] } : {}),
+        ...(vendorInvoiceId ? { vendorInvoiceId: { contains: vendorInvoiceId, mode: "insensitive" } } : {})
+      },
       include: { vendor: true, items: { include: { product: true } } },
       orderBy: { receivedAt: "desc" },
       take: 500
@@ -504,6 +513,8 @@ export const registerMissingReportRoutes = (ownerRouter) => {
         if (productId && item.productId !== productId) return;
         rows.push({
           "Date": o.receivedAt,
+          "Transaction Id": o.transactionId || o.orderNumber || "-",
+          "Vendor Invoice Id": o.vendorInvoiceId || "-",
           "Product": item.product?.name || "-",
           "Vendor": o.vendor?.name || "-",
           "Qty": item.quantityReceived,
@@ -662,35 +673,69 @@ export const registerMissingReportRoutes = (ownerRouter) => {
   // ============ PnL Report ============
   ownerRouter.get("/reports/pnl", requireFeatureEnabled("advancedReports"), requireSalonPermission("advancedReports", "view"), async (req, res) => {
     const { startDate, endDate } = buildDateRange(req);
+    const branchId = normalizeBranchId(req.query.branchId);
+
     // Revenue
     const invoices = await prisma.invoice.findMany({
-      where: { ...buildInvoiceWhere(req, normalizeBranchId(req.query.branchId)), status: "PAID", createdAt: { gte: startDate, lte: endDate } },
-      include: { items: true }
+      where: { ...buildInvoiceWhere(req, branchId), status: "PAID", createdAt: { gte: startDate, lte: endDate } },
+      include: { items: { include: { product: { include: { category: true } } } } }
     });
     const revenue = invoices.reduce((s, inv) => s + toAmount(inv.subtotal) - toAmount(inv.discount), 0);
-    const cogs = invoices.reduce((s, inv) => s + inv.items.reduce((a, i) => a + toAmount(i.qty || 1) * toAmount(i.unitPrice || 0) * 0.3, 0), 0);
-    // Expenses
+
+    // Cost of Sales: products sold (retail) + consumable goods used
+    const productCogs = invoices.reduce((s, inv) => s + inv.items
+      .filter(i => i.itemType === "PRODUCT")
+      .reduce((a, i) => a + toAmount(i.qty || 1) * toAmount(i.unitPrice || 0) * 0.3, 0), 0);
+    const consumableCogs = invoices.reduce((s, inv) => s + inv.items
+      .filter(i => i.itemType === "SERVICE")
+      .reduce((a, i) => a + toAmount(i.qty || 1) * toAmount(i.unitPrice || 0) * 0.05, 0), 0);
+    const totalCogs = productCogs + consumableCogs;
+
+    // Expenses grouped by category
     const expenses = await prisma.expense.findMany({
-      where: { salonId: req.salonId, status: "APPROVED", expenseDate: { gte: startDate, lte: endDate } }
+      where: { salonId: req.salonId, status: "APPROVED", expenseDate: { gte: startDate, lte: endDate } },
+      include: { category: true }
     });
-    const totalExpenses = expenses.reduce((s, e) => s + toAmount(e.amount), 0);
-    const grossProfit = revenue - cogs;
-    const netProfit = grossProfit - totalExpenses;
-    const months = [];
-    const cursor = new Date(startDate);
-    while (cursor <= endDate) {
-      months.push({ key: cursor.toISOString().slice(0, 7), label: cursor.toLocaleDateString("en-GB", { month: "short", year: "numeric" }) });
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-    const rows = months.map((m) => ({
-      "Month": m.label,
-      "Revenue": Math.round(revenue / months.length),
-      "COGS": Math.round(cogs / months.length),
-      "Gross Profit": Math.round(grossProfit / months.length),
-      "Expenses": Math.round(totalExpenses / months.length),
-      "Net Profit": Math.round(netProfit / months.length),
-      "Margin Percentage": revenue ? Math.round((netProfit / revenue) * 100) : 0
-    }));
-    res.json(appendTotalRow(rows, "Month", "TOTAL", ["Revenue", "COGS", "Gross Profit", "Expenses", "Net Profit"]));
+    const expenseByCategory = {};
+    expenses.forEach((e) => {
+      const cat = e.category?.name || "Other Expenses";
+      expenseByCategory[cat] = (expenseByCategory[cat] || 0) + toAmount(e.amount);
+    });
+    const totalExpenses = Object.values(expenseByCategory).reduce((s, v) => s + v, 0);
+
+    const grossProfit = revenue - totalCogs;
+    const netProfitBeforeTax = grossProfit - totalExpenses;
+    // Simplified income tax estimate: 0% below threshold, 25% above 5L in period
+    const incomeTax = netProfitBeforeTax > 500000 ? Math.round(netProfitBeforeTax * 0.25) : 0;
+    const netProfit = netProfitBeforeTax - incomeTax;
+
+    const line = (name, profit = 0, loss = 0, isHeader = false, isTotal = false) => ({
+      "NAME": name,
+      "PROFIT": profit || 0,
+      "LOSS": loss || 0,
+      "_isHeader": isHeader,
+      "_isTotal": isTotal
+    });
+
+    const rows = [
+      line("Revenue", revenue, 0, true),
+      line("Cost of Sales", 0, 0, true),
+      line("Cosmetics", 0, productCogs),
+      line("Cost of Consumable Goods", 0, consumableCogs),
+      line("Gross Profit", grossProfit, 0, true),
+      line("General and Administrative Expenses", 0, 0, true),
+      ...Object.entries(expenseByCategory).map(([name, amount]) => line(name, 0, amount)),
+      line("Profit before expense", netProfitBeforeTax, 0, true),
+      line("Net profit before Income tax", netProfitBeforeTax, 0, true),
+      line("Income tax", 0, incomeTax),
+      line("Net Profit/Loss", netProfit, 0, false, true)
+    ];
+
+    res.json({
+      title: `PNL Report for ${startDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}`,
+      columns: ["NAME", "PROFIT", "LOSS"],
+      rows,
+      summary: { revenue, cogs: totalCogs, grossProfit, totalExpenses, netProfitBeforeTax, incomeTax, netProfit }
+    });
   });
 };

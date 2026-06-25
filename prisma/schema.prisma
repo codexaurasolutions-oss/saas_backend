@@ -891,6 +891,8 @@ model PurchaseOrder {
   vendorId        String
   createdByUserId String?
   orderNumber     String              @unique
+  transactionId   String?
+  vendorInvoiceId String?
   status          PurchaseOrderStatus @default(DRAFT)
   notes           String?
   orderedAt       DateTime            @default(now())
