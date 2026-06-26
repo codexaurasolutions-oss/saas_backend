@@ -573,7 +573,7 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
       include: { items: true }
     });
 
-    await createPaymentRows(tx, salonId, invoice.id, allPayments);
+    await createPaymentRows(tx, salonId, invoice.id, allPayments.filter(p => p.mode !== "BALANCE"));
 
     for (const item of itemDrafts) {
       if (item.itemType === "PRODUCT") {
@@ -859,6 +859,11 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
 };
 
 export const addInvoicePayment = async ({ salonId, invoiceId, amount, mode, note, actorUser }) => {
+  if (mode === "BALANCE") {
+    const error = new Error("BALANCE is not a valid payment mode");
+    error.status = 400;
+    throw error;
+  }
   return prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findFirst({
       where: { id: invoiceId, salonId },
