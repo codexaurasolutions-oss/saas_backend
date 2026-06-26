@@ -87,7 +87,8 @@ export const registerInventoryRoutes = (ownerRouter) => {
         sellingPrice: req.body.sellingPrice,
         minStock: req.body.minStock || 0,
         expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
-        allowNegativeStock: Boolean(req.body.allowNegativeStock)
+        allowNegativeStock: Boolean(req.body.allowNegativeStock),
+        featured: Boolean(req.body.featured)
       }
     }));
   });
@@ -109,7 +110,8 @@ export const registerInventoryRoutes = (ownerRouter) => {
         sellingPrice: req.body.sellingPrice,
         minStock: req.body.minStock ?? product.minStock,
         expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
-        allowNegativeStock: Boolean(req.body.allowNegativeStock)
+        allowNegativeStock: Boolean(req.body.allowNegativeStock),
+        featured: req.body.featured !== undefined ? Boolean(req.body.featured) : product.featured
       }
     }));
   });
