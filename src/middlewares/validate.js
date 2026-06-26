@@ -169,7 +169,7 @@ const emailOrIndianPhoneSchema = z.string().trim().transform((value) => (
 const isValidDateString = (value) => !Number.isNaN(Date.parse(String(value)));
 const requiredDateString = z.string().trim().min(1).pipe(z.string().refine(isValidDateString, "Invalid date"));
 const optionalDateString = z.union([z.literal(""), z.string().trim().refine(isValidDateString, "Invalid date")]).optional();
-const paymentModeEnum = z.enum(["CASH", "CARD", "UPI", "BANK_TRANSFER", "WALLET", "ONLINE"]);
+const paymentModeEnum = z.enum(["CASH", "CARD", "UPI", "BANK_TRANSFER", "WALLET", "ONLINE", "ADVANCE"]);
 const onlineOrderStatusEnum = z.enum(["NEW", "ACCEPTED", "READY", "COMPLETED", "CANCELLED"]);
 const orderPaymentStatusEnum = z.enum(["PENDING", "PAID", "FAILED", "REFUNDED"]);
 const emailLikeSchema = z.string().trim().refine(
