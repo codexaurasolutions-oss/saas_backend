@@ -588,7 +588,11 @@ export const schemas = {
       benefits: optionalString,
       ingredients: optionalString,
       usageInstructions: optionalString,
-      variations: z.array(z.any()).optional()
+      variations: z.array(z.any()).optional(),
+      weight: z.number().min(0).nullable().optional(),
+      length: z.number().min(0).nullable().optional(),
+      width: z.number().min(0).nullable().optional(),
+      height: z.number().min(0).nullable().optional()
     })
   }),
   stockMovement: z.object({

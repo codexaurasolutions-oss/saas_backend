@@ -99,7 +99,11 @@ export const registerInventoryRoutes = (ownerRouter) => {
         benefits: req.body.benefits || null,
         ingredients: req.body.ingredients || null,
         usageInstructions: req.body.usageInstructions || null,
-        variations: req.body.variations || undefined
+        variations: req.body.variations || undefined,
+        weight: req.body.weight ?? null,
+        length: req.body.length ?? null,
+        width: req.body.width ?? null,
+        height: req.body.height ?? null
       }
     }));
   });
@@ -133,7 +137,11 @@ export const registerInventoryRoutes = (ownerRouter) => {
         benefits: req.body.benefits !== undefined ? req.body.benefits : product.benefits,
         ingredients: req.body.ingredients !== undefined ? req.body.ingredients : product.ingredients,
         usageInstructions: req.body.usageInstructions !== undefined ? req.body.usageInstructions : product.usageInstructions,
-        variations: req.body.variations !== undefined ? req.body.variations : product.variations
+        variations: req.body.variations !== undefined ? req.body.variations : product.variations,
+        weight: req.body.weight !== undefined ? req.body.weight : product.weight,
+        length: req.body.length !== undefined ? req.body.length : product.length,
+        width: req.body.width !== undefined ? req.body.width : product.width,
+        height: req.body.height !== undefined ? req.body.height : product.height
       }
     }));
   });
