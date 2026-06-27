@@ -1225,4 +1225,150 @@ reportsRouter.get("/day-wise", async (req, res) => {
   ]));
 });
 
+// Service Reminder report
+reportsRouter.get("/service-reminder", async (req, res) => {
+  const salonId = req.salonId;
+  const { start, end } = req.query;
+
+  const salon = await prisma.salon.findUnique({ where: { id: salonId }, select: { serviceReminderDays: true } });
+  const reminderDays = salon?.serviceReminderDays || 30;
+
+  const sinceDate = start ? parseDateSafe(start) : new Date(Date.now() - reminderDays * 24 * 60 * 60 * 1000);
+  const untilDate = end ? parseDateSafe(end, true) : new Date();
+
+  const customers = await prisma.customer.findMany({
+    where: { salonId, isDeleted: false },
+    include: {
+      invoices: {
+        where: { salonId, createdAt: { gte: sinceDate, lte: untilDate } },
+        include: { items: { include: { service: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 1
+      }
+    }
+  });
+
+  const rows = [];
+  for (const customer of customers) {
+    const lastInvoice = customer.invoices[0];
+    if (!lastInvoice) continue;
+    const lastService = lastInvoice.items?.[0]?.service?.name || lastInvoice.items?.[0]?.serviceName || "-";
+    const lastDate = lastInvoice.createdAt;
+    const dueDate = new Date(lastDate);
+    dueDate.setDate(dueDate.getDate() + reminderDays);
+    const isDue = dueDate <= new Date();
+
+    rows.push({
+      "Customer": customer.name || "-",
+      "Phone": customer.phone || "-",
+      "Last Service": lastService,
+      "Service Date": lastDate ? new Date(lastDate).toLocaleDateString() : "-",
+      "Due Date": dueDate.toLocaleDateString(),
+      "Status": isDue ? "Due" : "Upcoming"
+    });
+  }
+
+  res.json(rows);
+});
+
+// Feedback report
+reportsRouter.get("/feedback", async (req, res) => {
+  const salonId = req.salonId;
+  const { start, end } = req.query;
+  const where = { salonId };
+  if (start || end) {
+    where.createdAt = {};
+    if (start) where.createdAt.gte = parseDateSafe(start);
+    if (end) where.createdAt.lte = parseDateSafe(end, true);
+  }
+
+  const feedbacks = await prisma.customerFeedback.findMany({
+    where,
+    include: {
+      customer: { select: { name: true } },
+      staffUserSalon: { include: { user: { select: { name: true } } } },
+      service: { select: { name: true } },
+      branch: { select: { name: true } }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  const rows = feedbacks.map((f) => ({
+    "Date": f.createdAt ? new Date(f.createdAt).toLocaleDateString() : "-",
+    "Customer": f.customer?.name || "-",
+    "Staff": f.staffUserSalon?.user?.name || "-",
+    "Service": f.service?.name || "-",
+    "Rating": f.rating || 0,
+    "Comment": f.message || "-"
+  }));
+
+  res.json(rows);
+});
+
+// Incentive report
+reportsRouter.get("/incentive", async (req, res) => {
+  const salonId = req.salonId;
+  const { start, end, basedOn } = req.query;
+
+  const startDt = start ? parseDateSafe(start) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const endDt = end ? parseDateSafe(end, true) : new Date();
+
+  const rules = await prisma.incentiveRule.findMany({
+    where: { salonId, isActive: true },
+    orderBy: { createdAt: "desc" }
+  });
+
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      salonId,
+      status: { not: "CANCELLED" },
+      createdAt: { gte: startDt, lte: endDt }
+    },
+    include: {
+      items: true,
+      assignedStaff: { include: { userSalon: { include: { user: { select: { name: true } } } } } }
+    }
+  });
+
+  const staffRevenue = {};
+  invoices.forEach((inv) => {
+    const staffEntries = inv.assignedStaff || [];
+    const total = toAmount(inv.total);
+    const perStaff = staffEntries.length > 0 ? total / staffEntries.length : total;
+
+    staffEntries.forEach((entry) => {
+      const name = entry.userSalon?.user?.name || "Unknown";
+      if (!staffRevenue[name]) staffRevenue[name] = { revenue: 0, commission: 0, incentive: 0 };
+      staffRevenue[name].revenue += perStaff;
+    });
+
+    if (staffEntries.length === 0) {
+      const name = "Unassigned";
+      if (!staffRevenue[name]) staffRevenue[name] = { revenue: 0, commission: 0, incentive: 0 };
+      staffRevenue[name].revenue += total;
+    }
+  });
+
+  const rows = Object.entries(staffRevenue).map(([staffName, data]) => {
+    let incentiveAmt = 0;
+    let commissionPct = 0;
+    for (const rule of rules) {
+      if (data.revenue >= toAmount(rule.minTarget || 0)) {
+        incentiveAmt += toAmount(rule.incentiveAmount);
+      }
+    }
+
+    return {
+      "Staff": staffName,
+      "Revenue Generated": data.revenue,
+      "Commission %": commissionPct,
+      "Commission Amt": data.commission,
+      "Bonus": incentiveAmt,
+      "Total": data.commission + incentiveAmt
+    };
+  });
+
+  res.json(rows);
+});
+
 // (extended reports routes were removed — the registration stub has been deleted)
