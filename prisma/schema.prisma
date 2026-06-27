@@ -496,10 +496,12 @@ model Service {
   branchId             String?
   categoryId           String?
   name                 String
+  position             Int                       @default(0)
   gender               String?                   @default("UNISEX")
   price                Decimal                   @db.Decimal(10, 2)
+  salePrice            Decimal?                  @db.Decimal(10, 2)
   durationMin          Int
-  description          String?
+  description          Json?
   taxRate              Decimal?                  @db.Decimal(5, 2)
   onlineBookingEnabled Boolean                   @default(false)
   commissionPct        Decimal?                  @db.Decimal(5, 2)
@@ -507,6 +509,10 @@ model Service {
   isPopular            Boolean                   @default(false)
   isPublicVisible      Boolean                   @default(true)
   isActive             Boolean                   @default(true)
+  hideFromCatalogue    Boolean                   @default(false)
+  nonDiscountable      Boolean                   @default(false)
+  serviceTag           String?
+  serviceRemainderDays Int                       @default(0)
   createdAt            DateTime                  @default(now())
   salon                Salon                     @relation(fields: [salonId], references: [id])
   branch               Branch?                   @relation(fields: [branchId], references: [id])
@@ -518,6 +524,27 @@ model Service {
   feedback             CustomerFeedback[]
   coupons              Coupon[]
   enquiries            Enquiry[]
+  consumables          ServiceConsumable[]
+  taxes                ServiceTax[]
+}
+
+model ServiceConsumable {
+  id        String  @id @default(cuid())
+  serviceId String
+  productId String
+  reqdQty   Decimal @db.Decimal(10, 2) @default(0)
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, productId])
+}
+
+model ServiceTax {
+  id        String  @id @default(cuid())
+  serviceId String
+  name      String
+  rate      Decimal @db.Decimal(5, 2)
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 }
 
 model Customer {
@@ -838,6 +865,7 @@ model Product {
   orderItems         OnlineOrderItem[]
   coupons            Coupon[]
   vendorItems        VendorItem[]
+  serviceConsumables ServiceConsumable[]
 
   @@unique([salonId, sku])
 }

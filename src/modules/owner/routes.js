@@ -562,55 +562,88 @@ ownerRouter.get("/services", requireSalonPermission("services", "view"), async (
   const branchId = normalizeBranchId(req.query.branchId);
   res.json(await prisma.service.findMany({
     where: { salonId: req.salonId, isActive: true, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) },
-    include: { branch: true, category: true },
-    orderBy: { createdAt: "desc" }
+    include: { branch: true, category: true, consumables: { include: { product: true } }, taxes: true },
+    orderBy: [{ position: "asc" }, { createdAt: "desc" }]
   }));
 });
 ownerRouter.post("/services", requireSalonPermission("services", "create"), validate(schemas.service), async (req, res) => {
-  // Gender field added to prisma schema to prevent service creation 500 error
   const branchId = normalizeBranchId(req.body.branchId);
   if (branchId) await ensureBranch(req.salonId, branchId);
   const categoryId = req.body.categoryId || null;
   const taxRows = await prisma.taxRate.findMany({ where: { salonId: req.salonId, active: true } });
   const defaultServiceTax = taxRows.find((row) => row.applicableFor?.split(",").includes("SERVICE"));
   const explicitTaxRate = req.body.taxRate != null ? toAmount(req.body.taxRate) : null;
-  const { gender, ...createData } = req.body;
-  res.status(201).json(await prisma.service.create({
+  const { gender, consumables, taxes: serviceTaxes, ...createData } = req.body;
+  const service = await prisma.service.create({
     data: {
       ...createData,
       branchId,
       categoryId,
       price: toAmount(req.body.price),
+      salePrice: req.body.salePrice != null ? toAmount(req.body.salePrice) : null,
       durationMin: Number(req.body.durationMin),
       taxRate: explicitTaxRate ?? (defaultServiceTax?.rate != null ? toAmount(defaultServiceTax.rate) : null),
       commissionPct: req.body.commissionPct != null ? toAmount(req.body.commissionPct) : null,
+      position: req.body.position ?? 0,
+      serviceRemainderDays: req.body.serviceRemainderDays ?? 0,
       salonId: req.salonId
-    },
-    include: { branch: true, category: true }
-  }));
+    }
+  });
+  if (Array.isArray(consumables) && consumables.length > 0) {
+    await prisma.serviceConsumable.createMany({
+      data: consumables.map(c => ({ serviceId: service.id, productId: c.productId, reqdQty: toAmount(c.reqdQty) }))
+    });
+  }
+  if (Array.isArray(serviceTaxes) && serviceTaxes.length > 0) {
+    await prisma.serviceTax.createMany({
+      data: serviceTaxes.map(t => ({ serviceId: service.id, name: t.name, rate: toAmount(t.rate) }))
+    });
+  }
+  const result = await prisma.service.findUnique({ where: { id: service.id }, include: { branch: true, category: true, consumables: { include: { product: true } }, taxes: true } });
+  res.status(201).json(result);
 });
 ownerRouter.patch("/services/:id", requireSalonPermission("services", "edit"), validate(schemas.service), async (req, res) => {
   const row = await findScoped("service", req.salonId, req.params.id);
   if (!row) return res.status(404).json({ message: "Service not found" });
   const branchId = normalizeBranchId(req.body.branchId);
   if (branchId) await ensureBranch(req.salonId, branchId);
-  const { gender, ...updateData } = req.body;
+  const { gender, consumables, taxes: serviceTaxes, ...updateData } = req.body;
   const taxRows = await prisma.taxRate.findMany({ where: { salonId: req.salonId, active: true } });
   const defaultServiceTax = taxRows.find((taxRow) => taxRow.applicableFor?.split(",").includes("SERVICE"));
   const explicitTaxRate = req.body.taxRate != null ? toAmount(req.body.taxRate) : null;
-  res.json(await prisma.service.update({
+  await prisma.service.update({
     where: { id: req.params.id },
     data: {
       ...updateData,
       branchId,
       categoryId: req.body.categoryId !== undefined ? req.body.categoryId : row.categoryId,
       price: toAmount(req.body.price),
+      salePrice: req.body.salePrice !== undefined ? (req.body.salePrice != null ? toAmount(req.body.salePrice) : null) : row.salePrice,
       durationMin: Number(req.body.durationMin),
       taxRate: explicitTaxRate ?? (defaultServiceTax?.rate != null ? toAmount(defaultServiceTax.rate) : row.taxRate),
-      commissionPct: req.body.commissionPct != null ? toAmount(req.body.commissionPct) : null
-    },
-    include: { branch: true, category: true }
-  }));
+      commissionPct: req.body.commissionPct != null ? toAmount(req.body.commissionPct) : null,
+      position: req.body.position ?? row.position,
+      serviceRemainderDays: req.body.serviceRemainderDays ?? row.serviceRemainderDays
+    }
+  });
+  if (Array.isArray(consumables)) {
+    await prisma.serviceConsumable.deleteMany({ where: { serviceId: req.params.id } });
+    if (consumables.length > 0) {
+      await prisma.serviceConsumable.createMany({
+        data: consumables.map(c => ({ serviceId: req.params.id, productId: c.productId, reqdQty: toAmount(c.reqdQty) }))
+      });
+    }
+  }
+  if (Array.isArray(serviceTaxes)) {
+    await prisma.serviceTax.deleteMany({ where: { serviceId: req.params.id } });
+    if (serviceTaxes.length > 0) {
+      await prisma.serviceTax.createMany({
+        data: serviceTaxes.map(t => ({ serviceId: req.params.id, name: t.name, rate: toAmount(t.rate) }))
+      });
+    }
+  }
+  const result = await prisma.service.findUnique({ where: { id: req.params.id }, include: { branch: true, category: true, consumables: { include: { product: true } }, taxes: true } });
+  res.json(result);
 });
 ownerRouter.patch("/services/:id/archive", requireSalonPermission("services", "delete"), async (req, res) => {
   const row = await findScoped("service", req.salonId, req.params.id);

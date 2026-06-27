@@ -302,17 +302,25 @@ export const schemas = {
   service: z.object({
     body: z.object({
       name: z.string().min(2),
+      position: z.number().int().min(0).optional(),
       price: z.number().nonnegative(),
+      salePrice: z.number().min(0).nullable().optional(),
       durationMin: z.number().int().positive(),
       branchId: z.string().optional(),
       categoryId: z.string().nullable().optional(),
-      description: optionalString,
+      description: z.any().optional(),
       gender: z.enum(["MALE", "FEMALE", "UNISEX"]).optional(),
       taxRate: z.number().min(0).optional(),
       onlineBookingEnabled: z.boolean().optional(),
       commissionPct: z.number().min(0).optional(),
       isFeatured: z.boolean().optional(),
-      isPopular: z.boolean().optional()
+      isPopular: z.boolean().optional(),
+      hideFromCatalogue: z.boolean().optional(),
+      nonDiscountable: z.boolean().optional(),
+      serviceTag: optionalString,
+      serviceRemainderDays: z.number().int().min(0).optional(),
+      consumables: z.array(z.object({ productId: z.string(), reqdQty: z.number().min(0) })).optional(),
+      taxes: z.array(z.object({ name: z.string().min(1), rate: z.number().min(0) })).optional()
     })
   }),
   customer: z.object({
