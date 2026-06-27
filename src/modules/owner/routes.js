@@ -266,6 +266,62 @@ ownerRouter.get("/dashboard", requireSalonPermission("dashboard", "view"), async
   });
 });
 
+ownerRouter.get("/global-search", requireSalonPermission("customers", "view"), async (req, res) => {
+  const q = (req.query.q || "").trim();
+  if (q.length < 2) return res.json({ customers: [], services: [], products: [], staff: [], appointments: [], invoices: [] });
+
+  const salonId = req.salonId;
+  const term = { contains: q, mode: "insensitive" };
+
+  const [customers, services, products, staff, appointments, invoices] = await Promise.all([
+    prisma.customer.findMany({
+      where: { salonId, isActive: true, OR: [{ name: term }, { phone: term }, { email: term }] },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, phone: true, email: true }
+    }),
+    prisma.service.findMany({
+      where: { salonId, isActive: true, name: term },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, price: true, category: { select: { name: true } } }
+    }),
+    prisma.product.findMany({
+      where: { salonId, isActive: true, OR: [{ name: term }, { sku: term }] },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, sku: true, sellingPrice: true, currentStock: true }
+    }),
+    prisma.userSalon.findMany({
+      where: { salonId, user: { name: term } },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, user: { select: { name: true, email: true } }, salonRole: true }
+    }),
+    prisma.appointment.findMany({
+      where: { salonId, OR: [{ title: term }, { customer: { name: term } }] },
+      take: 5,
+      orderBy: { startAt: "desc" },
+      select: { id: true, title: true, status: true, startAt: true, customer: { select: { name: true } } }
+    }),
+    prisma.invoice.findMany({
+      where: { salonId, OR: [{ invoiceNumber: term }, { customer: { name: term } }] },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, invoiceNumber: true, total: true, status: true, customer: { select: { name: true } } }
+    })
+  ]);
+
+  res.json({
+    customers: customers.map((c) => ({ id: c.id, title: c.name, subtitle: [c.phone, c.email].filter(Boolean).join(" | ") || "Guest", to: `/admin/customers?q=${encodeURIComponent(c.name)}` })),
+    services: services.map((s) => ({ id: s.id, title: s.name, subtitle: `${s.category?.name || "Service"} — ₹${s.price}`, to: `/admin/services` })),
+    products: products.map((p) => ({ id: p.id, title: p.name, subtitle: `SKU: ${p.sku || "N/A"} — ₹${p.sellingPrice}`, to: `/admin/inventory` })),
+    staff: staff.map((u) => ({ id: u.id, title: u.user?.name || "Staff", subtitle: u.salonRole || "Staff member", to: `/admin/users` })),
+    appointments: appointments.map((a) => ({ id: a.id, title: a.title || a.customer?.name || "Appointment", subtitle: `${a.status} — ${new Date(a.startAt).toLocaleDateString()}`, to: `/admin/appointments` })),
+    invoices: invoices.map((inv) => ({ id: inv.id, title: inv.invoiceNumber || "Invoice", subtitle: `${inv.customer?.name || "Walk-in"} — ₹${inv.total} (${inv.status})`, to: `/admin/invoices` }))
+  });
+});
+
 ownerRouter.get("/branches", requireSalonPermission("branches", "view"), async (req, res) => {
   const rows = await prisma.branch.findMany({
     where: { salonId: req.salonId, isActive: true },
