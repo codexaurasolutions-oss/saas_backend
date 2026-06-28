@@ -268,12 +268,12 @@ ownerRouter.get("/dashboard", requireSalonPermission("dashboard", "view"), async
 
 ownerRouter.get("/global-search", requireSalonPermission("customers", "view"), async (req, res) => {
   const q = (req.query.q || "").trim();
-  if (q.length < 2) return res.json({ customers: [], services: [], products: [], staff: [], appointments: [], invoices: [] });
+  if (q.length < 2) return res.json({ results: [] });
 
   const salonId = req.salonId;
   const term = { contains: q, mode: "insensitive" };
 
-  const [customers, services, products, staff, appointments, invoices] = await Promise.all([
+  const [customers, services, products, staff, appointments, invoices, memberships, packages] = await Promise.all([
     prisma.customer.findMany({
       where: { salonId, isActive: true, OR: [{ name: term }, { phone: term }, { email: term }] },
       take: 5,
@@ -281,7 +281,7 @@ ownerRouter.get("/global-search", requireSalonPermission("customers", "view"), a
       select: { id: true, name: true, phone: true, email: true }
     }),
     prisma.service.findMany({
-      where: { salonId, isActive: true, name: term },
+      where: { salonId, isActive: true, OR: [{ name: term }, { serviceTag: term }] },
       take: 5,
       orderBy: { createdAt: "desc" },
       select: { id: true, name: true, price: true, category: { select: { name: true } } }
@@ -309,17 +309,33 @@ ownerRouter.get("/global-search", requireSalonPermission("customers", "view"), a
       take: 5,
       orderBy: { createdAt: "desc" },
       select: { id: true, invoiceNumber: true, total: true, status: true, customer: { select: { name: true } } }
+    }),
+    prisma.membershipPlan.findMany({
+      where: { salonId, isActive: true, name: term },
+      take: 3,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, price: true, validityDays: true }
+    }),
+    prisma.package.findMany({
+      where: { salonId, isActive: true, name: term },
+      take: 3,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, price: true }
     })
   ]);
 
-  res.json({
-    customers: customers.map((c) => ({ id: c.id, title: c.name, subtitle: [c.phone, c.email].filter(Boolean).join(" | ") || "Guest", to: `/admin/customers?q=${encodeURIComponent(c.name)}` })),
-    services: services.map((s) => ({ id: s.id, title: s.name, subtitle: `${s.category?.name || "Service"} — ₹${s.price}`, to: `/admin/services` })),
-    products: products.map((p) => ({ id: p.id, title: p.name, subtitle: `SKU: ${p.sku || "N/A"} — ₹${p.sellingPrice}`, to: `/admin/inventory` })),
-    staff: staff.map((u) => ({ id: u.id, title: u.user?.name || "Staff", subtitle: u.salonRole || "Staff member", to: `/admin/users` })),
-    appointments: appointments.map((a) => ({ id: a.id, title: a.title || a.customer?.name || "Appointment", subtitle: `${a.status} — ${new Date(a.startAt).toLocaleDateString()}`, to: `/admin/appointments` })),
-    invoices: invoices.map((inv) => ({ id: inv.id, title: inv.invoiceNumber || "Invoice", subtitle: `${inv.customer?.name || "Walk-in"} — ₹${inv.total} (${inv.status})`, to: `/admin/invoices` }))
-  });
+  const results = [];
+  customers.forEach(c => results.push({ id: c.id, title: c.name, subtitle: [c.phone, c.email].filter(Boolean).join(" | ") || "Guest", module: "CRM", icon: "user", to: `/admin/customers?q=${encodeURIComponent(c.name)}` }));
+  services.forEach(s => results.push({ id: s.id, title: s.name, subtitle: `${s.category?.name || "Service"} — ₹${s.price}`, module: "Services", icon: "scissors", to: `/admin/services?q=${encodeURIComponent(s.name)}` }));
+  products.forEach(p => results.push({ id: p.id, title: p.name, subtitle: `SKU: ${p.sku || "N/A"} — ₹${p.sellingPrice} — Stock: ${p.currentStock}`, module: "Inventory", icon: "package", to: `/admin/inventory?q=${encodeURIComponent(p.name)}` }));
+  staff.forEach(u => results.push({ id: u.id, title: u.user?.name || "Staff", subtitle: `${u.salonRole || "Staff member"}${u.user?.email ? " — " + u.user.email : ""}`, module: "Staff", icon: "users", to: `/admin/users?q=${encodeURIComponent(u.user?.name || "")}` }));
+  appointments.forEach(a => results.push({ id: a.id, title: a.title || a.customer?.name || "Appointment", subtitle: `${a.status} — ${new Date(a.startAt).toLocaleDateString()} — ${a.customer?.name || ""}`, module: "Appointments", icon: "calendar", to: `/admin/appointments?q=${encodeURIComponent(a.title || a.customer?.name || "")}` }));
+  invoices.forEach(inv => results.push({ id: inv.id, title: inv.invoiceNumber || "Invoice", subtitle: `${inv.customer?.name || "Walk-in"} — ₹${inv.total} (${inv.status})`, module: "Invoices", icon: "file-text", to: `/admin/invoices?q=${encodeURIComponent(inv.invoiceNumber || "")}` }));
+  memberships.forEach(m => results.push({ id: m.id, title: m.name, subtitle: `₹${m.price} — ${m.validityDays} days`, module: "Memberships", icon: "award", to: `/admin/memberships?q=${encodeURIComponent(m.name)}` }));
+  packages.forEach(p => results.push({ id: p.id, title: p.name, subtitle: `₹${p.price}`, module: "Packages", icon: "gift", to: `/admin/memberships?q=${encodeURIComponent(p.name)}` }));
+
+  results.sort((a, b) => a.title.toLowerCase().indexOf(q.toLowerCase()) - b.title.toLowerCase().indexOf(q.toLowerCase()));
+  res.json({ results: results.slice(0, 20) });
 });
 
 ownerRouter.get("/branches", requireSalonPermission("branches", "view"), async (req, res) => {
