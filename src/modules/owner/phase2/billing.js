@@ -1259,7 +1259,7 @@ const sanitizeInvoicePhone = (phone) => {
   });
 
   // Customer Packages for POS redemption
-  ownerRouter.get("/customers/:id/packages", requireSalonPermission("billing", "view"), async (req, res) => {
+  ownerRouter.get("/customers/:id/packages", requireSalonPermission("pos", "view"), async (req, res) => {
     const customer = await prisma.customer.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
     if (!customer) return res.status(404).json({ message: "Customer not found" });
     const packages = await prisma.customerPackage.findMany({
@@ -1273,7 +1273,7 @@ const sanitizeInvoicePhone = (phone) => {
   });
 
   // Gift Card Validation for POS redemption
-  ownerRouter.post("/gift-cards/validate", requireSalonPermission("billing", "view"), async (req, res) => {
+  ownerRouter.post("/gift-cards/validate", requireSalonPermission("pos", "view"), async (req, res) => {
     const { code, customerId } = req.body;
     if (!code) return res.status(400).json({ message: "Gift card code is required" });
     const giftCard = await prisma.giftCard.findFirst({
@@ -1299,7 +1299,7 @@ const sanitizeInvoicePhone = (phone) => {
   });
 
   // Add Tip to existing invoice
-  ownerRouter.post("/invoices/:id/tip", requireSalonPermission("billing", "edit"), async (req, res) => {
+  ownerRouter.post("/invoices/:id/tip", requireSalonPermission("pos", "edit"), async (req, res) => {
     try {
       const { amount, mode, staffId, note } = req.body;
       if (!amount || Number(amount) <= 0) return res.status(400).json({ message: "Tip amount must be greater than zero" });
@@ -1320,7 +1320,7 @@ const sanitizeInvoicePhone = (phone) => {
   });
 
   // Apply Gift Card to existing invoice
-  ownerRouter.post("/invoices/:id/apply-gift-card", requireSalonPermission("billing", "edit"), async (req, res) => {
+  ownerRouter.post("/invoices/:id/apply-gift-card", requireSalonPermission("pos", "edit"), async (req, res) => {
     const { giftCardCode } = req.body;
     if (!giftCardCode) return res.status(400).json({ message: "Gift card code is required" });
     
