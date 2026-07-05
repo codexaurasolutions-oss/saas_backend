@@ -9,6 +9,21 @@ const smtpConfigured = () =>
 
 const createTransporter = () => {
   if (smtpConfigured()) {
+    const isGmail = (process.env.SMTP_HOST || "").toLowerCase().includes("gmail") || 
+                    (process.env.SMTP_SERVICE || "").toLowerCase() === "gmail";
+
+    if (isGmail) {
+      return nodemailer.createTransport({
+        service: "gmail",
+        auth: process.env.SMTP_USER
+          ? {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS || ""
+            }
+          : undefined
+      });
+    }
+
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT),
