@@ -9,6 +9,7 @@ import { convertDemoToPaid, sendTrialReminder } from "../../lib/subscriptionLife
 import { runExpiredDemoCleanup } from "../../lib/trialCleanup.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { createAuditLog } from "../../lib/phase4.js";
+import { sendMail } from "../../lib/mailer.js";
 
 export const superAdminRouter = Router();
 superAdminRouter.use(requireAuth, requireSystemRole("SUPER_ADMIN"));
@@ -256,7 +257,10 @@ superAdminRouter.post("/plans", validate(schemas.plan), asyncHandler(async (req,
   });
   res.status(201).json(plan);
 }));
-superAdminRouter.get("/plans", asyncHandler(async (req, res) => res.json(await prisma.plan.findMany({ orderBy: { createdAt: "desc" } }))));
+superAdminRouter.get("/plans", asyncHandler(async (req, res) => {
+  const plans = await prisma.plan.findMany({ orderBy: { createdAt: "desc" } });
+  return res.json(plans.slice(0, 1));
+}));
 superAdminRouter.patch("/plans/:id", validate(schemas.plan), asyncHandler(async (req, res) => {
   const {
     name,
@@ -486,6 +490,112 @@ superAdminRouter.post("/demo-leads/:id/resend-invite", asyncHandler(async (req, 
   if (result.error) return res.status(result.error.status).json({ message: result.error.message });
   return res.json(result);
 }));
+
+superAdminRouter.post("/demo-leads/:id/contacted", asyncHandler(async (req, res) => {
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+  const updated = await prisma.demoLead.update({
+    where: { id: req.params.id },
+    data: { status: "CONTACTED" }
+  });
+  return res.json(updated);
+}));
+
+superAdminRouter.post("/demo-leads/:id/schedule-meeting", asyncHandler(async (req, res) => {
+  const { meetingScheduledAt, meetingLink } = req.body;
+  if (!meetingScheduledAt || !meetingLink) {
+    return res.status(400).json({ message: "meetingScheduledAt and meetingLink are required" });
+  }
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+
+  const updated = await prisma.demoLead.update({
+    where: { id: req.params.id },
+    data: {
+      status: "MEETING_SCHEDULED",
+      meetingScheduledAt: new Date(meetingScheduledAt),
+      meetingLink
+    }
+  });
+
+  const formattedDate = new Date(meetingScheduledAt).toLocaleString("en-US", {
+    dateStyle: "full",
+    timeStyle: "short"
+  });
+
+  try {
+    await sendMail({
+      to: lead.email,
+      subject: "Meeting Scheduled: ReSpark Product Demo Walkthrough",
+      text: `Hi ${lead.name},\n\nWe have scheduled a meeting to demonstrate the ReSpark software with you.\n\nDate & Time: ${formattedDate}\nMeeting Link: ${meetingLink}\n\nWe look forward to meeting you!\n\nBest regards,\nReSpark Team`,
+      html: `
+        <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
+          <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
+            <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#c2410c;margin:0 0 12px;">ReSpark Walkthrough</p>
+            <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#0f766e;">ReSpark Product Demo Meeting</h2>
+            <p style="font-size:16px;line-height:1.7;">Hi <strong>${lead.name}</strong>,</p>
+            <p style="font-size:16px;line-height:1.7;">We have scheduled a meeting for your ReSpark product demo walkthrough.</p>
+            <div style="background:#fff7ed;padding:18px 20px;border-radius:18px;margin:20px 0;border-left:4px solid #c2410c;">
+              <p style="margin:0 0 8px;font-size:15px;"><strong>Date & Time:</strong> ${formattedDate}</p>
+              <p style="margin:0;font-size:15px;"><strong>Meeting Link:</strong> <a href="${meetingLink}" style="color:#0f766e;font-weight:bold;text-decoration:underline;">Join Meeting</a></p>
+            </div>
+            <p style="font-size:16px;line-height:1.7;">We look forward to showing you how ReSpark can optimize your salon operations!</p>
+            <p style="margin-top:24px;font-size:14px;color:#516170;">Best regards,<br/><strong>ReSpark Team</strong></p>
+          </div>
+        </div>
+      `
+    });
+  } catch (err) {
+    console.error("Email send failed for demo meeting schedule:", err);
+  }
+
+  return res.json(updated);
+}));
+
+superAdminRouter.post("/demo-leads/:id/send-purchase-link", asyncHandler(async (req, res) => {
+  const { planId } = req.body;
+  if (!planId) return res.status(400).json({ message: "planId is required" });
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+
+  const plan = await prisma.plan.findUnique({ where: { id: planId } });
+  if (!plan) return res.status(404).json({ message: "Plan not found" });
+
+  const updated = await prisma.demoLead.update({
+    where: { id: req.params.id },
+    data: { selectedPlanId: planId }
+  });
+
+  const frontendUrl = process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173";
+  const checkoutUrl = `${frontendUrl}/demo-checkout/${lead.id}/${planId}`;
+
+  try {
+    await sendMail({
+      to: lead.email,
+      subject: `Select your ReSpark Subscription Plan: ${plan.name}`,
+      text: `Hi ${lead.name},\n\nThank you for attending the ReSpark product walkthrough. Please use the secure link below to purchase your subscription for the ${plan.name} plan:\n\n${checkoutUrl}\n\nBest regards,\nReSpark Team`,
+      html: `
+        <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
+          <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
+            <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">ReSpark Subscription Setup</p>
+            <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#c2410c;">Complete your ReSpark Subscription</h2>
+            <p style="font-size:16px;line-height:1.7;">Hi <strong>${lead.name}</strong>,</p>
+            <p style="font-size:16px;line-height:1.7;">Thank you for attending the product demo. We hope you are excited to scale your salon with ReSpark!</p>
+            <p style="font-size:16px;line-height:1.7;">Please use the secure link below to review your selected <strong>${plan.name}</strong> plan and complete your checkout:</p>
+            <p style="margin:28px 0;"><a href="${checkoutUrl}" style="display:inline-block;background:linear-gradient(135deg,#c2410c,#0f766e);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:bold;">Proceed to Subscription Checkout</a></p>
+            <p style="font-size:13px;color:#516170;">If the button doesn't work, copy and paste this link in your browser:<br/><a href="${checkoutUrl}" style="color:#0f766e;">${checkoutUrl}</a></p>
+            <p style="margin-top:24px;font-size:14px;color:#516170;">Best regards,<br/><strong>ReSpark Team</strong></p>
+          </div>
+        </div>
+      `
+    });
+  } catch (err) {
+    console.error("Email send failed for demo purchase link:", err);
+  }
+
+  return res.json(updated);
+}));
+
 superAdminRouter.get("/support-tickets", asyncHandler(async (req, res) => {
   const status = req.query.status ? String(req.query.status) : "";
   const priority = req.query.priority ? String(req.query.priority) : "";

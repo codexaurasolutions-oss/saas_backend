@@ -50,6 +50,8 @@ enum InvoiceStatus {
 
 enum DemoLeadStatus {
   PENDING
+  CONTACTED
+  MEETING_SCHEDULED
   APPROVED
   REJECTED
 }
@@ -428,6 +430,13 @@ model DemoLead {
   createdAt           DateTime             @default(now())
   salon               Salon?               @relation(fields: [salonId], references: [id])
   passwordSetupTokens PasswordSetupToken[]
+
+  // New Onboarding Fields
+  meetingScheduledAt  DateTime?
+  meetingLink         String?
+  selectedPlanId      String?
+  paymentCompleted    Boolean              @default(false)
+  paymentSessionId    String?
 }
 
 model PasswordSetupToken {

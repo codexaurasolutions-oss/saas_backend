@@ -56,16 +56,17 @@ describe("public single-salon routes", () => {
     expect(response.body.systemName).toBe("ReSpark QA");
   });
 
-  it("does not expose the old public demo lead endpoint anymore", async () => {
+  it("exposes the public demo lead endpoint", async () => {
+    prismaMock.demoLead.create.mockResolvedValue({ id: "lead-123" });
     const response = await request(buildApp()).post("/public/demo-leads").send({
       name: "QA Lead",
       email: "qa@example.com",
-      phone: "+913001234567",
+      phone: "+919876543201",
       company: "QA Salon",
       message: "Need demo"
     });
 
-    expect(response.status).toBe(404);
-    expect(prismaMock.demoLead.create).not.toHaveBeenCalled();
+    expect(response.status).toBe(201);
+    expect(prismaMock.demoLead.create).toHaveBeenCalled();
   });
 });

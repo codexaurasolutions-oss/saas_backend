@@ -95,10 +95,52 @@ registerPublicPhase3Routes(publicRouter);
 
 publicRouter.get("/plans", asyncHandler(async (req, res) => {
   const plans = await prisma.plan.findMany({ orderBy: { monthlyPrice: "asc" } });
-  res.json(plans.length ? plans : [
-    { id: "starter", name: "Starter", monthlyPrice: 4999, yearlyPrice: 49990, trialDays: 7, branchLimit: 9999, userLimit: 5, customerLimit: 500, invoiceLimit: 1000, storageLimit: 5 },
-    { id: "growth", name: "Growth", monthlyPrice: 9999, yearlyPrice: 99990, trialDays: 7, branchLimit: 9999, userLimit: 20, customerLimit: 3000, invoiceLimit: 10000, storageLimit: 20 }
+  res.json(plans.length ? plans.slice(0, 1) : [
+    { id: "starter", name: "Standard Plan", monthlyPrice: 4999, yearlyPrice: 49990, trialDays: 7, branchLimit: 99999, userLimit: 9999, customerLimit: 99999, invoiceLimit: 99999, storageLimit: 999 }
   ]);
+}));
+
+publicRouter.post("/demo-leads", validate(schemas.demoLead), asyncHandler(async (req, res) => {
+  const { name, email, phone, company, message } = req.body;
+  const lead = await prisma.demoLead.create({
+    data: { name, email, phone, company, message, status: "PENDING" }
+  });
+  res.status(201).json(lead);
+}));
+
+publicRouter.get("/demo-checkout-info/:leadId/:planId", asyncHandler(async (req, res) => {
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.leadId } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+  const plan = await prisma.plan.findUnique({ where: { id: req.params.planId } });
+  if (!plan) return res.status(404).json({ message: "Plan not found" });
+  res.json({
+    leadName: lead.name,
+    leadEmail: lead.email,
+    company: lead.company,
+    planName: plan.name,
+    price: plan.monthlyPrice,
+    limits: {
+      branches: plan.branchLimit,
+      users: plan.userLimit,
+      customers: plan.customerLimit,
+      invoices: plan.invoiceLimit
+    }
+  });
+}));
+
+publicRouter.post("/demo-checkout/:leadId", asyncHandler(async (req, res) => {
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.leadId } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+  const { planId, paymentSessionId } = req.body;
+  const updated = await prisma.demoLead.update({
+    where: { id: req.params.leadId },
+    data: {
+      paymentCompleted: true,
+      paymentSessionId: paymentSessionId || `demo_pay_${Date.now()}`,
+      selectedPlanId: planId || lead.selectedPlanId
+    }
+  });
+  res.json({ ok: true, lead: updated });
 }));
 
 // SECURITY: The following 3 debug endpoints have been REMOVED from production.

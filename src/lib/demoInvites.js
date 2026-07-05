@@ -118,7 +118,11 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
 
   const startsAt = new Date();
   const endsAt = new Date(startsAt);
-  endsAt.setDate(endsAt.getDate() + Number(trialDays || 7));
+  if (lead.paymentCompleted) {
+    endsAt.setDate(endsAt.getDate() + 30);
+  } else {
+    endsAt.setDate(endsAt.getDate() + Number(trialDays || 7));
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const finalSalonName = salonName?.trim() || `${lead.name.split(" ")[0] || "Demo"} Salon`;
@@ -133,9 +137,9 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
         email: lead.email,
         phone: lead.phone,
         businessType: businessType || "Salon",
-        status: "TRIAL",
-        trialStartsAt: startsAt,
-        trialEndsAt: endsAt,
+        status: lead.paymentCompleted ? "ACTIVE" : "TRIAL",
+        trialStartsAt: lead.paymentCompleted ? null : startsAt,
+        trialEndsAt: lead.paymentCompleted ? null : endsAt,
         featureFlags: plan.featureFlags || { pos: true, crm: true, reports: true, publicCatalog: true, digitalCatalog: true }
       }
     });
@@ -147,7 +151,7 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
         systemRole: "SALON_USER",
         passwordHash: ownerPasswordHash,
         passwordSetupRequired: true,
-        isDemoAccount: true
+        isDemoAccount: !lead.paymentCompleted
       }
     });
 
@@ -164,9 +168,9 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
       data: {
         salonId: salon.id,
         planId: plan.id,
-        status: "TRIAL",
-        paymentStatus: "PENDING",
-        notes: "Auto-created from approved demo lead",
+        status: lead.paymentCompleted ? "ACTIVE" : "TRIAL",
+        paymentStatus: lead.paymentCompleted ? "PAID" : "PENDING",
+        notes: lead.paymentCompleted ? "Auto-created paid onboarding workspace" : "Auto-created from approved demo lead",
         startsAt,
         endsAt
       }
@@ -175,14 +179,13 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
     await tx.subscriptionHistory.create({
       data: {
         subscriptionId: subscription.id,
-        action: "DEMO_APPROVED",
+        action: lead.paymentCompleted ? "ONBOARDING_PAID" : "DEMO_APPROVED",
         createdBy: actorName,
-        toStatus: "TRIAL",
-        toPaymentStatus: "PENDING",
-        notes: "7-day demo trial activated from demo lead approval"
+        toStatus: lead.paymentCompleted ? "ACTIVE" : "TRIAL",
+        toPaymentStatus: lead.paymentCompleted ? "PAID" : "PENDING",
+        notes: lead.paymentCompleted ? "30-day paid subscription activated from onboarding" : "7-day demo trial activated from demo lead approval"
       }
     });
-
     const rawToken = await issuePasswordSetupToken({
       tx,
       userId: owner.id,
