@@ -259,7 +259,7 @@ superAdminRouter.post("/plans", validate(schemas.plan), asyncHandler(async (req,
 }));
 superAdminRouter.get("/plans", asyncHandler(async (req, res) => {
   const plans = await prisma.plan.findMany({ orderBy: { createdAt: "desc" } });
-  return res.json(plans.slice(0, 1));
+  return res.json(plans);
 }));
 superAdminRouter.patch("/plans/:id", validate(schemas.plan), asyncHandler(async (req, res) => {
   const {
