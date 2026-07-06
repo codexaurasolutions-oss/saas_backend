@@ -250,7 +250,9 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
     inviteLink,
     loginLink,
     delivery,
-    emailError
+    emailError,
+    rawToken: result.rawToken,
+    loginAccessToken
   };
 };
 

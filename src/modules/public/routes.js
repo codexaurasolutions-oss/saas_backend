@@ -197,7 +197,8 @@ publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res
     .digest("hex");
 
   if (generated_signature === razorpaySignature) {
-    const updated = await prisma.demoLead.update({
+    // 1. Mark payment completed on the lead
+    const lead = await prisma.demoLead.update({
       where: { id: leadId },
       data: {
         paymentCompleted: true,
@@ -205,7 +206,25 @@ publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res
         selectedPlanId: planId
       }
     });
-    res.json({ ok: true, lead: updated });
+
+    // 2. Automate lead approval and workspace provisioning
+    const { approveDemoLead } = await import("../../lib/demoInvites.js");
+    const result = await approveDemoLead({
+      leadId,
+      actorName: "System Auto-Approval (Paid Checkout)",
+      planId,
+      trialDays: 30,
+      salonName: lead.company || lead.name,
+      businessType: "Salon",
+      reviewNote: "Automated paid checkout setup via Razorpay"
+    });
+
+    res.json({
+      ok: true,
+      setupToken: result.rawToken,
+      loginAccessToken: result.loginAccessToken,
+      email: lead.email
+    });
   } else {
     res.status(400).json({ message: "Payment verification failed. Invalid signature." });
   }
