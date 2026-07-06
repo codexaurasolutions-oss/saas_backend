@@ -143,6 +143,74 @@ publicRouter.post("/demo-checkout/:leadId", asyncHandler(async (req, res) => {
   res.json({ ok: true, lead: updated });
 }));
 
+publicRouter.post("/demo-checkout/:leadId/razorpay-order", asyncHandler(async (req, res) => {
+  const { planId } = req.body;
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.leadId } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+  const plan = await prisma.plan.findUnique({ where: { id: planId } });
+  if (!plan) return res.status(404).json({ message: "Plan not found" });
+
+  const keyId = process.env.RAZORPAY_KEY_ID || "rzp_test_TAAtuWKFZfp0f3";
+  const keySecret = process.env.RAZORPAY_SECRET_KEY || "kVhUs2zxmiveVbdkRDfPtnOQ";
+
+  const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
+  const response = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": authHeader
+    },
+    body: JSON.stringify({
+      amount: plan.monthlyPrice * 100, // in Paise
+      currency: "INR",
+      receipt: `rcpt_${lead.id.substring(0, 8)}_${Date.now().toString().substring(8)}`
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error("Razorpay Order Error:", errorData);
+    return res.status(400).json({ message: errorData.error?.description || "Razorpay order creation failed" });
+  }
+
+  const order = await response.json();
+  res.json({
+    orderId: order.id,
+    amount: order.amount,
+    currency: order.currency,
+    keyId: keyId,
+    leadName: lead.name,
+    leadEmail: lead.email,
+    leadPhone: lead.phone
+  });
+}));
+
+publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res) => {
+  const { leadId, planId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+  
+  const keySecret = process.env.RAZORPAY_SECRET_KEY || "kVhUs2zxmiveVbdkRDfPtnOQ";
+  
+  const { default: crypto } = await import("node:crypto");
+  const generated_signature = crypto
+    .createHmac("sha256", keySecret)
+    .update(razorpayOrderId + "|" + razorpayPaymentId)
+    .digest("hex");
+
+  if (generated_signature === razorpaySignature) {
+    const updated = await prisma.demoLead.update({
+      where: { id: leadId },
+      data: {
+        paymentCompleted: true,
+        paymentSessionId: razorpayPaymentId,
+        selectedPlanId: planId
+      }
+    });
+    res.json({ ok: true, lead: updated });
+  } else {
+    res.status(400).json({ message: "Payment verification failed. Invalid signature." });
+  }
+}));
+
 // SECURITY: The following 3 debug endpoints have been REMOVED from production.
 // They previously allowed anyone with the hardcoded key "respark123" to:
 //   1. /public/debug-db       - read all users, settings, gift cards
