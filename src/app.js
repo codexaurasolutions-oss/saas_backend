@@ -113,6 +113,15 @@ export const createApp = ({
   app.use(authMiddlewareOverride);
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
   app.use("/api/v1", routerOverride);
+  app.get("/api/v1/debug-db-users", async (req, res) => {
+    try {
+      const { prisma } = await import("./lib/prisma.js");
+      const users = await prisma.user.findMany({ select: { name: true, email: true, systemRole: true } });
+      res.json({ users, url: process.env.DATABASE_URL?.split("@")[1] || "no-db-url" });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
   app.get("/health", (req, res) => res.json({
     ok: true,
     environment: process.env.NODE_ENV || "development",
