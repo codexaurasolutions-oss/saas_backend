@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -8,31 +9,65 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🚀 Starting database clean up...");
   try {
-    // Delete in order to satisfy FK constraints
-    const history = await prisma.subscriptionHistory.deleteMany({});
-    console.log(`Deleted ${history.count} subscription history records.`);
+    const tables = [
+      "PasswordSetupToken",
+      "SubscriptionHistory",
+      "DemoLead",
+      "CustomerTimeline",
+      "CustomerMembership",
+      "CustomerPackage",
+      "PackageService",
+      "MembershipPlanService",
+      "InvoiceItem",
+      "Payment",
+      "Invoice",
+      "AppointmentServiceStaff",
+      "AppointmentService",
+      "Appointment",
+      "StockMovement",
+      "Product",
+      "ProductCategory",
+      "Service",
+      "ServiceCategory",
+      "StaffSchedule",
+      "UserSalon",
+      "Branch",
+      "CustomRole",
+      "Subscription",
+      "CatalogSetting",
+      "EcommerceSetting",
+      "SalonSetting",
+      "User",
+      "Salon",
+      "Plan"
+    ];
 
-    const subs = await prisma.subscription.deleteMany({});
-    console.log(`Deleted ${subs.count} subscriptions.`);
+    for (const table of tables) {
+      try {
+        await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
+        console.log(`Truncated table: ${table}`);
+      } catch (e) {
+        try {
+          await prisma[table].deleteMany({});
+          console.log(`Deleted many on table: ${table}`);
+        } catch (err) {
+          console.log(`Skipped or errored table: ${table}`);
+        }
+      }
+    }
 
-    const userSalons = await prisma.userSalon.deleteMany({});
-    console.log(`Deleted ${userSalons.count} userSalon links.`);
-
-    // Delete users that are NOT super admins so they don't lock out
-    const users = await prisma.user.deleteMany({
-      where: {
-        systemRole: { not: "SUPER_ADMIN" }
+    console.log("Creating default Super Admin user...");
+    const superAdminEmail = "superadmin@respark.local";
+    await prisma.user.create({
+      data: {
+        email: superAdminEmail,
+        name: "Super Admin",
+        systemRole: "SUPER_ADMIN",
+        passwordHash: await bcrypt.hash("Admin@123", 10)
       }
     });
-    console.log(`Deleted ${users.count} salon users.`);
 
-    const salons = await prisma.salon.deleteMany({});
-    console.log(`Deleted ${salons.count} salons.`);
-
-    const plans = await prisma.plan.deleteMany({});
-    console.log(`Deleted ${plans.count} plans.`);
-
-    console.log("✨ Database successfully cleaned up!");
+    console.log("✨ Database successfully wiped! Only Super Admin remains.");
   } catch (error) {
     console.error("❌ Error cleaning database:", error);
   } finally {
