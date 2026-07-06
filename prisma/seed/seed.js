@@ -24,6 +24,9 @@ async function main() {
   };
 
   const tables = [
+    "PasswordSetupToken",
+    "SubscriptionHistory",
+    "DemoLead",
     "CustomerTimeline",
     "CustomerMembership",
     "CustomerPackage",
