@@ -395,7 +395,15 @@ superAdminRouter.patch("/subscriptions/:id", asyncHandler(async (req, res) => {
     });
   });
 
-  res.json(updated);
+superAdminRouter.delete("/subscriptions/:id", asyncHandler(async (req, res) => {
+  const existing = await prisma.subscription.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ message: "Subscription not found" });
+
+  await prisma.$transaction([
+    prisma.subscriptionHistory.deleteMany({ where: { subscriptionId: req.params.id } }),
+    prisma.subscription.delete({ where: { id: req.params.id } })
+  ]);
+  res.json({ success: true, message: "Subscription deleted successfully." });
 }));
 superAdminRouter.post("/subscriptions/:id/send-trial-reminder", asyncHandler(async (req, res) => {
   const result = await sendTrialReminder({
