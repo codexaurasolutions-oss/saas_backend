@@ -79,14 +79,16 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
   const showServices = catalogSettings?.showServices !== false;
   const showProducts = catalogSettings?.showProducts !== false && ecommerceSettings?.storeEnabled === true;
 
-  const [services, products] = await Promise.all([
+  const [services, products, categories] = await Promise.all([
     showServices ? prisma.service.findMany({ where: { salonId: salon.id, isActive: true, isPublicVisible: true } }) : [],
-    showProducts ? prisma.product.findMany({ where: { salonId: salon.id, isActive: true, isOnlineVisible: true }, include: { category: true, branch: true } }) : []
+    showProducts ? prisma.product.findMany({ where: { salonId: salon.id, isActive: true, isOnlineVisible: true }, include: { category: true, branch: true } }) : [],
+    showProducts ? prisma.productCategory.findMany({ where: { salonId: salon.id, isActive: true, isPublicVisible: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }) : []
   ]);
   res.json({
     salon: { ...salon, settings: undefined, catalogSettings: undefined, ecommerceSettings: undefined },
     services,
     products,
+    categories,
     websiteConfig: {
       heroTitle: String(websiteConfig.heroTitle || ""),
       heroSubtitle: String(websiteConfig.heroSubtitle || ""),
@@ -144,6 +146,53 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
       staff: catalogSettings?.showStaffPortfolio !== false
     }
   });
+}));
+
+publicRouter.get("/salon/:slug/categories", asyncHandler(async (req, res) => {
+  let salon = await prisma.salon.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+  if (!salon) {
+    const custom = await prisma.catalogSetting.findFirst({ where: { customSlug: req.params.slug }, select: { salonId: true } });
+    if (custom) salon = await prisma.salon.findUnique({ where: { id: custom.salonId }, select: { id: true } });
+  }
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+  const categories = await prisma.productCategory.findMany({
+    where: { salonId: salon.id, isActive: true, isPublicVisible: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+  });
+  res.json(categories);
+}));
+
+publicRouter.get("/salon/:slug/products", asyncHandler(async (req, res) => {
+  let salon = await prisma.salon.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+  if (!salon) {
+    const custom = await prisma.catalogSetting.findFirst({ where: { customSlug: req.params.slug }, select: { salonId: true } });
+    if (custom) salon = await prisma.salon.findUnique({ where: { id: custom.salonId }, select: { id: true } });
+  }
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+  const where = { salonId: salon.id, isActive: true, isOnlineVisible: true };
+  if (req.query.categoryId) where.categoryId = req.query.categoryId;
+  if (req.query.search) where.name = { contains: req.query.search };
+  const products = await prisma.product.findMany({
+    where,
+    include: { category: true, branch: true },
+    orderBy: { createdAt: "desc" }
+  });
+  res.json(products);
+}));
+
+publicRouter.get("/salon/:slug/product/:productId", asyncHandler(async (req, res) => {
+  let salon = await prisma.salon.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+  if (!salon) {
+    const custom = await prisma.catalogSetting.findFirst({ where: { customSlug: req.params.slug }, select: { salonId: true } });
+    if (custom) salon = await prisma.salon.findUnique({ where: { id: custom.salonId }, select: { id: true } });
+  }
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+  const product = await prisma.product.findFirst({
+    where: { id: req.params.productId, salonId: salon.id, isActive: true },
+    include: { category: true, branch: true }
+  });
+  if (!product) return res.status(404).json({ message: "Product not found" });
+  res.json(product);
 }));
 
 registerPublicPhase3Routes(publicRouter);
