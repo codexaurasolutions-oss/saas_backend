@@ -49,11 +49,6 @@ enum InvoiceStatus {
 }
 
 enum DemoLeadStatus {
-  PENDING
-  CONTACTED
-  MEETING_SCHEDULED
-  APPROVED
-  REJECTED
   NEW
   CONNECTED
   IN_PROGRESS
