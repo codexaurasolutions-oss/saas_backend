@@ -1584,14 +1584,49 @@ ownerRouter.post("/settings", requireSalonPermission("settings", "edit"), valida
 ownerRouter.get("/website/config", requireSalonPermission("settings", "view"), async (req, res) => {
   const salon = await prisma.salon.findUnique({
     where: { id: req.salonId },
-    select: { featureFlags: true }
+    select: { featureFlags: true, name: true, logoUrl: true }
   });
   const featureFlags = typeof salon?.featureFlags === "object" && salon.featureFlags ? salon.featureFlags : {};
-  const websiteConfig = typeof featureFlags.websiteConfig === "object" && featureFlags.websiteConfig ? featureFlags.websiteConfig : {};
+  const wc = typeof featureFlags.websiteConfig === "object" && featureFlags.websiteConfig ? featureFlags.websiteConfig : {};
   res.json({
-    heroTitle: String(websiteConfig.heroTitle || ""),
-    heroSubtitle: String(websiteConfig.heroSubtitle || ""),
-    heroImage: String(websiteConfig.heroImage || "")
+    salonName: String(wc.salonName || salon?.name || ""),
+    logoUrl: String(wc.logoUrl || salon?.logoUrl || ""),
+    heroTitle: String(wc.heroTitle || ""),
+    heroSubtitle: String(wc.heroSubtitle || ""),
+    heroImage: String(wc.heroImage || ""),
+    heroBtn1Text: String(wc.heroBtn1Text || ""),
+    heroBtn1Link: String(wc.heroBtn1Link || ""),
+    heroBtn2Text: String(wc.heroBtn2Text || ""),
+    heroBtn2Link: String(wc.heroBtn2Link || ""),
+    aboutTitle: String(wc.aboutTitle || ""),
+    aboutDescription: String(wc.aboutDescription || ""),
+    aboutImage: String(wc.aboutImage || ""),
+    aboutMission: String(wc.aboutMission || ""),
+    aboutVision: String(wc.aboutVision || ""),
+    galleryImages: Array.isArray(wc.galleryImages) ? wc.galleryImages : [],
+    contactPhone: String(wc.contactPhone || ""),
+    contactEmail: String(wc.contactEmail || ""),
+    contactAddress: String(wc.contactAddress || ""),
+    contactMapUrl: String(wc.contactMapUrl || ""),
+    socialFacebook: String(wc.socialFacebook || ""),
+    socialInstagram: String(wc.socialInstagram || ""),
+    socialYoutube: String(wc.socialYoutube || ""),
+    socialTiktok: String(wc.socialTiktok || ""),
+    socialTwitter: String(wc.socialTwitter || ""),
+    businessHours: Array.isArray(wc.businessHours) ? wc.businessHours : [
+      { day: "Mon-Fri", hours: "9:00 AM - 8:00 PM" },
+      { day: "Saturday", hours: "10:00 AM - 6:00 PM" },
+      { day: "Sunday", hours: "Closed" }
+    ],
+    ctaTitle: String(wc.ctaTitle || ""),
+    ctaSubtitle: String(wc.ctaSubtitle || ""),
+    ctaBtnText: String(wc.ctaBtnText || ""),
+    ctaBtnLink: String(wc.ctaBtnLink || ""),
+    ctaImage: String(wc.ctaImage || ""),
+    testimonials: Array.isArray(wc.testimonials) ? wc.testimonials : [],
+    primaryColor: String(wc.primaryColor || "#c8a97e"),
+    secondaryColor: String(wc.secondaryColor || "#111111"),
+    footerText: String(wc.footerText || "")
   });
 });
 
@@ -1602,9 +1637,40 @@ ownerRouter.post("/website/config", requireSalonPermission("settings", "edit"), 
   });
   const featureFlags = typeof salon?.featureFlags === "object" && salon.featureFlags ? salon.featureFlags : {};
   const websiteConfig = {
+    salonName: String(req.body.salonName || "").trim(),
+    logoUrl: String(req.body.logoUrl || "").trim(),
     heroTitle: String(req.body.heroTitle || "").trim(),
     heroSubtitle: String(req.body.heroSubtitle || "").trim(),
-    heroImage: String(req.body.heroImage || "").trim()
+    heroImage: String(req.body.heroImage || "").trim(),
+    heroBtn1Text: String(req.body.heroBtn1Text || "").trim(),
+    heroBtn1Link: String(req.body.heroBtn1Link || "").trim(),
+    heroBtn2Text: String(req.body.heroBtn2Text || "").trim(),
+    heroBtn2Link: String(req.body.heroBtn2Link || "").trim(),
+    aboutTitle: String(req.body.aboutTitle || "").trim(),
+    aboutDescription: String(req.body.aboutDescription || "").trim(),
+    aboutImage: String(req.body.aboutImage || "").trim(),
+    aboutMission: String(req.body.aboutMission || "").trim(),
+    aboutVision: String(req.body.aboutVision || "").trim(),
+    galleryImages: Array.isArray(req.body.galleryImages) ? req.body.galleryImages : [],
+    contactPhone: String(req.body.contactPhone || "").trim(),
+    contactEmail: String(req.body.contactEmail || "").trim(),
+    contactAddress: String(req.body.contactAddress || "").trim(),
+    contactMapUrl: String(req.body.contactMapUrl || "").trim(),
+    socialFacebook: String(req.body.socialFacebook || "").trim(),
+    socialInstagram: String(req.body.socialInstagram || "").trim(),
+    socialYoutube: String(req.body.socialYoutube || "").trim(),
+    socialTiktok: String(req.body.socialTiktok || "").trim(),
+    socialTwitter: String(req.body.socialTwitter || "").trim(),
+    businessHours: Array.isArray(req.body.businessHours) ? req.body.businessHours : [],
+    ctaTitle: String(req.body.ctaTitle || "").trim(),
+    ctaSubtitle: String(req.body.ctaSubtitle || "").trim(),
+    ctaBtnText: String(req.body.ctaBtnText || "").trim(),
+    ctaBtnLink: String(req.body.ctaBtnLink || "").trim(),
+    ctaImage: String(req.body.ctaImage || "").trim(),
+    testimonials: Array.isArray(req.body.testimonials) ? req.body.testimonials : [],
+    primaryColor: String(req.body.primaryColor || "").trim(),
+    secondaryColor: String(req.body.secondaryColor || "").trim(),
+    footerText: String(req.body.footerText || "").trim()
   };
   await prisma.salon.update({
     where: { id: req.salonId },
