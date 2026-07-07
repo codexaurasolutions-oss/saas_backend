@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { validate, schemas } from "../../middlewares/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { registerPublicPhase3Routes } from "./phase3.js";
+import { resolvePublicSalonBySlug } from "../../lib/phase3.js";
 
 export const publicRouter = Router();
 
@@ -30,7 +31,7 @@ publicRouter.get("/settings", asyncHandler(async (req, res) => {
 }));
 
 publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
-  const salon = await prisma.salon.findUnique({ 
+  let salon = await prisma.salon.findUnique({ 
     where: { slug: req.params.slug },
     include: {
       catalogSettings: true,
@@ -38,6 +39,22 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
       settings: { where: { branchId: null }, take: 1 }
     }
   });
+  if (!salon) {
+    const customSlugSetting = await prisma.catalogSetting.findFirst({
+      where: { customSlug: req.params.slug },
+      select: { salonId: true }
+    });
+    if (customSlugSetting) {
+      salon = await prisma.salon.findUnique({
+        where: { id: customSlugSetting.salonId },
+        include: {
+          catalogSettings: true,
+          ecommerceSettings: true,
+          settings: { where: { branchId: null }, take: 1 }
+        }
+      });
+    }
+  }
   if (!salon) return res.status(404).json({ message: "Salon not found" });
   const catalogSettings = salon.catalogSettings.find((item) => item.branchId === null) || salon.catalogSettings[0] || null;
   if (catalogSettings?.catalogEnabled === false) return res.status(403).json({ message: "Public catalog is disabled for this salon" });
@@ -73,7 +90,38 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
     websiteConfig: {
       heroTitle: String(websiteConfig.heroTitle || ""),
       heroSubtitle: String(websiteConfig.heroSubtitle || ""),
-      heroImage: String(websiteConfig.heroImage || "")
+      heroImage: String(websiteConfig.heroImage || ""),
+      heroBtn1Text: String(websiteConfig.heroBtn1Text || ""),
+      heroBtn1Link: String(websiteConfig.heroBtn1Link || ""),
+      heroBtn2Text: String(websiteConfig.heroBtn2Text || ""),
+      heroBtn2Link: String(websiteConfig.heroBtn2Link || ""),
+      aboutTitle: String(websiteConfig.aboutTitle || ""),
+      aboutDescription: String(websiteConfig.aboutDescription || ""),
+      aboutImage: String(websiteConfig.aboutImage || ""),
+      aboutMission: String(websiteConfig.aboutMission || ""),
+      aboutVision: String(websiteConfig.aboutVision || ""),
+      galleryImages: Array.isArray(websiteConfig.galleryImages) ? websiteConfig.galleryImages : [],
+      contactPhone: String(websiteConfig.contactPhone || ""),
+      contactEmail: String(websiteConfig.contactEmail || ""),
+      contactAddress: String(websiteConfig.contactAddress || ""),
+      contactMapUrl: String(websiteConfig.contactMapUrl || ""),
+      socialFacebook: String(websiteConfig.socialFacebook || ""),
+      socialInstagram: String(websiteConfig.socialInstagram || ""),
+      socialYoutube: String(websiteConfig.socialYoutube || ""),
+      socialTiktok: String(websiteConfig.socialTiktok || ""),
+      socialTwitter: String(websiteConfig.socialTwitter || ""),
+      businessHours: Array.isArray(websiteConfig.businessHours) ? websiteConfig.businessHours : [],
+      ctaTitle: String(websiteConfig.ctaTitle || ""),
+      ctaSubtitle: String(websiteConfig.ctaSubtitle || ""),
+      ctaBtnText: String(websiteConfig.ctaBtnText || ""),
+      ctaBtnLink: String(websiteConfig.ctaBtnLink || ""),
+      ctaImage: String(websiteConfig.ctaImage || ""),
+      testimonials: Array.isArray(websiteConfig.testimonials) ? websiteConfig.testimonials : [],
+      primaryColor: String(websiteConfig.primaryColor || ""),
+      secondaryColor: String(websiteConfig.secondaryColor || ""),
+      footerText: String(websiteConfig.footerText || ""),
+      salonName: String(websiteConfig.salonName || ""),
+      logoUrl: String(websiteConfig.logoUrl || "")
     },
     genericSettings,
     legalContent,
