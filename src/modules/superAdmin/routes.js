@@ -482,13 +482,13 @@ superAdminRouter.post("/demo-leads/:id/approve", validate(schemas.demoLeadReview
 superAdminRouter.post("/demo-leads/:id/reject", validate(schemas.demoLeadReject), asyncHandler(async (req, res) => {
   const lead = await prisma.demoLead.findUnique({ where: { id: req.params.id } });
   if (!lead) return res.status(404).json({ message: "Demo lead not found" });
-  if (lead.status === "APPROVED") {
-    return res.status(400).json({ message: "Approved demo leads cannot be rejected directly." });
+  if (lead.status === "CONVERTED") {
+    return res.status(400).json({ message: "Converted demo leads cannot be canceled directly." });
   }
   const updated = await prisma.demoLead.update({
     where: { id: req.params.id },
     data: {
-      status: "REJECTED",
+      status: "CANCELED",
       reviewedAt: new Date(),
       reviewedByName: req.user.name,
       reviewNote: req.body.reviewNote
@@ -507,7 +507,7 @@ superAdminRouter.post("/demo-leads/:id/contacted", asyncHandler(async (req, res)
   if (!lead) return res.status(404).json({ message: "Demo lead not found" });
   const updated = await prisma.demoLead.update({
     where: { id: req.params.id },
-    data: { status: "CONTACTED" }
+    data: { status: "CONNECTED" }
   });
   return res.json(updated);
 }));
@@ -523,7 +523,7 @@ superAdminRouter.post("/demo-leads/:id/schedule-meeting", asyncHandler(async (re
   const updated = await prisma.demoLead.update({
     where: { id: req.params.id },
     data: {
-      status: "MEETING_SCHEDULED",
+      status: "IN_PROGRESS",
       meetingScheduledAt: new Date(meetingScheduledAt),
       meetingLink
     }
@@ -604,6 +604,26 @@ superAdminRouter.post("/demo-leads/:id/send-purchase-link", asyncHandler(async (
     console.error("Email send failed for demo purchase link:", err);
   }
 
+  return res.json(updated);
+}));
+
+superAdminRouter.patch("/demo-leads/:id/status", asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ["NEW", "CONNECTED", "IN_PROGRESS", "CONVERTED", "CANCELED"];
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+  }
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+
+  const updated = await prisma.demoLead.update({
+    where: { id: req.params.id },
+    data: {
+      status,
+      ...(status === "CONVERTED" ? { reviewedAt: new Date(), reviewedByName: req.user.name } : {}),
+      ...(status === "CANCELED" ? { reviewedAt: new Date(), reviewedByName: req.user.name } : {})
+    }
+  });
   return res.json(updated);
 }));
 
@@ -828,4 +848,26 @@ superAdminRouter.get("/audit-logs", asyncHandler(async (req, res) => {
     .slice(0, 30);
 
   res.json(logs);
+}));
+
+superAdminRouter.post("/migrate-demo-lead-statuses", asyncHandler(async (req, res) => {
+  if (req.query.key !== "respark-pipeline-migration-2026") {
+    return res.status(403).json({ message: "Invalid migration key" });
+  }
+  const oldStatusMap = {
+    PENDING: "NEW",
+    CONTACTED: "CONNECTED",
+    MEETING_SCHEDULED: "IN_PROGRESS",
+    APPROVED: "CONVERTED",
+    REJECTED: "CANCELED"
+  };
+  let migrated = 0;
+  for (const [oldStatus, newStatus] of Object.entries(oldStatusMap)) {
+    const result = await prisma.demoLead.updateMany({
+      where: { status: oldStatus },
+      data: { status: newStatus }
+    });
+    migrated += result.count;
+  }
+  res.json({ message: `Migration complete. ${migrated} leads updated.`, oldStatusMap });
 }));

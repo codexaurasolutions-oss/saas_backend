@@ -96,11 +96,11 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
   if (!lead) {
     return { error: { status: 404, message: "Demo lead not found" } };
   }
-  if (lead.status === "REJECTED") {
-    return { error: { status: 400, message: "Rejected demo lead cannot be approved directly" } };
+  if (lead.status === "CANCELED") {
+    return { error: { status: 400, message: "Canceled demo leads cannot be approved directly." } };
   }
-  if (lead.status === "APPROVED" && lead.salonId && lead.approvedUserId) {
-    return { error: { status: 400, message: "Demo lead is already approved. Use resend invite if needed." } };
+  if (lead.status === "CONVERTED" && lead.salonId && lead.approvedUserId) {
+    return { error: { status: 400, message: "Demo lead is already converted. Use resend invite if needed." } };
   }
 
   const existingUser = await prisma.user.findUnique({ where: { email: lead.email } });
@@ -196,12 +196,12 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
     const updatedLead = await tx.demoLead.update({
       where: { id: lead.id },
       data: {
-        status: "APPROVED",
+        status: "CONVERTED",
         salonId: salon.id,
         approvedUserId: owner.id,
         reviewedAt: new Date(),
         reviewedByName: actorName,
-        reviewNote: reviewNote || "Approved for 7-day demo"
+        reviewNote: reviewNote || "Converted to demo workspace"
       }
     });
 
@@ -258,8 +258,8 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
 
 export const resendDemoInvite = async ({ leadId }) => {
   const lead = await prisma.demoLead.findUnique({ where: { id: leadId } });
-  if (!lead || lead.status !== "APPROVED" || !lead.salonId || !lead.approvedUserId) {
-    return { error: { status: 400, message: "Only approved demo leads can receive a resent invite." } };
+  if (!lead || lead.status !== "CONVERTED" || !lead.salonId || !lead.approvedUserId) {
+    return { error: { status: 400, message: "Only converted demo leads can receive a resent invite." } };
   }
 
   const [owner, subscription, salon] = await Promise.all([
