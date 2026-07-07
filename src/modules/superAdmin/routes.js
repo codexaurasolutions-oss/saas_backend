@@ -395,6 +395,9 @@ superAdminRouter.patch("/subscriptions/:id", asyncHandler(async (req, res) => {
     });
   });
 
+  res.json(updated);
+}));
+
 superAdminRouter.delete("/subscriptions/:id", asyncHandler(async (req, res) => {
   const existing = await prisma.subscription.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ message: "Subscription not found" });
