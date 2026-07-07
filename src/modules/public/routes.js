@@ -195,6 +195,63 @@ publicRouter.get("/salon/:slug/product/:productId", asyncHandler(async (req, res
   res.json(product);
 }));
 
+// Public order tracking — customer can track order by order number + phone/email
+publicRouter.get("/salon/:slug/track-order", asyncHandler(async (req, res) => {
+  let salon = await prisma.salon.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+  if (!salon) {
+    const custom = await prisma.catalogSetting.findFirst({ where: { customSlug: req.params.slug }, select: { salonId: true } });
+    if (custom) salon = await prisma.salon.findUnique({ where: { id: custom.salonId }, select: { id: true } });
+  }
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+  const { orderNumber, phone, email } = req.query;
+  if (!orderNumber) return res.status(400).json({ message: "Order number is required" });
+  const where = { salonId: salon.id, orderNumber: String(orderNumber) };
+  if (phone) where.customerPhone = String(phone);
+  if (email) where.customerEmail = String(email);
+  const order = await prisma.onlineOrder.findFirst({
+    where,
+    include: {
+      items: { include: { product: true } },
+      logs: { orderBy: { createdAt: "asc" } }
+    }
+  });
+  if (!order) return res.status(404).json({ message: "Order not found. Please check your order number and contact details." });
+  res.json({
+    orderNumber: order.orderNumber,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    total: order.total,
+    createdAt: order.createdAt,
+    completedAt: order.completedAt,
+    items: order.items.map(i => ({
+      name: i.product?.name || i.name,
+      qty: i.qty,
+      price: i.price
+    })),
+    timeline: order.logs.map(l => ({
+      status: l.toStatus,
+      note: l.note,
+      createdAt: l.createdAt
+    }))
+  });
+}));
+
+// Public enquiry submission
+publicRouter.post("/salon/:slug/enquiry", asyncHandler(async (req, res) => {
+  let salon = await prisma.salon.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+  if (!salon) {
+    const custom = await prisma.catalogSetting.findFirst({ where: { customSlug: req.params.slug }, select: { salonId: true } });
+    if (custom) salon = await prisma.salon.findUnique({ where: { id: custom.salonId }, select: { id: true } });
+  }
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+  const { name, email, phone, message } = req.body;
+  if (!name || !email || !phone || !message) return res.status(400).json({ message: "Name, email, phone, and message are required" });
+  const enquiry = await prisma.enquiry.create({
+    data: { salonId: salon.id, name, email, phone, message, source: "WEBSITE" }
+  });
+  res.status(201).json({ ok: true, id: enquiry.id });
+}));
+
 registerPublicPhase3Routes(publicRouter);
 
 publicRouter.get("/plans", asyncHandler(async (req, res) => {
