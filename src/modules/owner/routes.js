@@ -1626,6 +1626,13 @@ ownerRouter.get("/website/config", requireSalonPermission("settings", "view"), a
     testimonials: Array.isArray(wc.testimonials) ? wc.testimonials : [],
     primaryColor: String(wc.primaryColor || "#c8a97e"),
     secondaryColor: String(wc.secondaryColor || "#111111"),
+    bannerImage: String(wc.bannerImage || ""),
+    bannerTitle: String(wc.bannerTitle || ""),
+    bannerSubtitle: String(wc.bannerSubtitle || ""),
+    bannerBtnText: String(wc.bannerBtnText || ""),
+    bannerBtnLink: String(wc.bannerBtnLink || ""),
+    cardShape: String(wc.cardShape || "rounded"),
+    sections: Array.isArray(wc.sections) ? wc.sections : [],
     footerText: String(wc.footerText || "")
   });
 });
@@ -1670,6 +1677,13 @@ ownerRouter.post("/website/config", requireSalonPermission("settings", "edit"), 
     testimonials: Array.isArray(req.body.testimonials) ? req.body.testimonials : [],
     primaryColor: String(req.body.primaryColor || "").trim(),
     secondaryColor: String(req.body.secondaryColor || "").trim(),
+    bannerImage: String(req.body.bannerImage || "").trim(),
+    bannerTitle: String(req.body.bannerTitle || "").trim(),
+    bannerSubtitle: String(req.body.bannerSubtitle || "").trim(),
+    bannerBtnText: String(req.body.bannerBtnText || "").trim(),
+    bannerBtnLink: String(req.body.bannerBtnLink || "").trim(),
+    cardShape: String(req.body.cardShape || "rounded").trim(),
+    sections: Array.isArray(req.body.sections) ? req.body.sections : [],
     footerText: String(req.body.footerText || "").trim()
   };
   await prisma.salon.update({

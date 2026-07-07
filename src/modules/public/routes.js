@@ -119,6 +119,13 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
       testimonials: Array.isArray(websiteConfig.testimonials) ? websiteConfig.testimonials : [],
       primaryColor: String(websiteConfig.primaryColor || ""),
       secondaryColor: String(websiteConfig.secondaryColor || ""),
+      bannerImage: String(websiteConfig.bannerImage || ""),
+      bannerTitle: String(websiteConfig.bannerTitle || ""),
+      bannerSubtitle: String(websiteConfig.bannerSubtitle || ""),
+      bannerBtnText: String(websiteConfig.bannerBtnText || ""),
+      bannerBtnLink: String(websiteConfig.bannerBtnLink || ""),
+      cardShape: String(websiteConfig.cardShape || "rounded"),
+      sections: Array.isArray(websiteConfig.sections) ? websiteConfig.sections : [],
       footerText: String(websiteConfig.footerText || ""),
       salonName: String(websiteConfig.salonName || ""),
       logoUrl: String(websiteConfig.logoUrl || "")
