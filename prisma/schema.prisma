@@ -391,6 +391,7 @@ model Plan {
   invoiceLimit  Int      @default(1000)
   storageLimit  Int?
   isCustom      Boolean  @default(false)
+  isPopular     Boolean  @default(false)
   featureFlags  Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

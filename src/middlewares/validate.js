@@ -265,6 +265,7 @@ export const schemas = {
       invoiceLimit: z.number().int().min(0),
       storageLimit: z.number().int().min(0).optional(),
       isCustom: z.boolean().optional(),
+      isPopular: z.boolean().optional(),
       featureFlags: z.record(z.boolean()).optional()
     })
   }),

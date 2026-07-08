@@ -237,6 +237,7 @@ superAdminRouter.post("/plans", validate(schemas.plan), asyncHandler(async (req,
     invoiceLimit,
     storageLimit,
     isCustom,
+    isPopular,
     featureFlags
   } = req.body;
 
@@ -252,7 +253,8 @@ superAdminRouter.post("/plans", validate(schemas.plan), asyncHandler(async (req,
       monthlyPrice: toAmount(monthlyPrice),
       yearlyPrice: toAmount(yearlyPrice),
       storageLimit: storageLimit != null ? Number(storageLimit) : null,
-      isCustom: Boolean(isCustom)
+      isCustom: Boolean(isCustom),
+      isPopular: Boolean(isPopular)
     }
   });
   res.status(201).json(plan);
@@ -273,6 +275,7 @@ superAdminRouter.patch("/plans/:id", validate(schemas.plan), asyncHandler(async 
     invoiceLimit,
     storageLimit,
     isCustom,
+    isPopular,
     featureFlags
   } = req.body;
 
@@ -289,7 +292,8 @@ superAdminRouter.patch("/plans/:id", validate(schemas.plan), asyncHandler(async 
       monthlyPrice: toAmount(monthlyPrice),
       yearlyPrice: toAmount(yearlyPrice),
       storageLimit: storageLimit != null ? Number(storageLimit) : null,
-      isCustom: Boolean(isCustom)
+      isCustom: Boolean(isCustom),
+      isPopular: Boolean(isPopular)
     }
   }));
 }));
