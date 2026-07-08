@@ -920,3 +920,65 @@ superAdminRouter.post("/migrate-demo-lead-statuses", asyncHandler(async (req, re
   }
   res.json({ message: `Migration complete. ${migrated} leads updated.`, oldStatusMap });
 }));
+
+superAdminRouter.get("/traffic-analytics", asyncHandler(async (req, res) => {
+  const period = req.query.period || "7d";
+  const salonFilter = req.query.salonId || "";
+  const now = new Date();
+  let since = new Date();
+  if (period === "today") since.setHours(0, 0, 0, 0);
+  else if (period === "7d") since.setDate(now.getDate() - 7);
+  else if (period === "30d") since.setDate(now.getDate() - 30);
+  else if (period === "90d") since.setDate(now.getDate() - 90);
+  else since.setDate(now.getDate() - 7);
+
+  const whereBase = { createdAt: { gte: since } };
+  const where = salonFilter ? { ...whereBase, salonId: salonFilter } : whereBase;
+
+  const [totalVisits, uniqueIps, visitsBySalon, visitsByDay, visitsByPath, topReferrers] = await Promise.all([
+    prisma.websiteVisit.count({ where }),
+    prisma.websiteVisit.findMany({ where, select: { ip: true }, distinct: ["ip"] }).then((r) => r.length),
+    prisma.websiteVisit.groupBy({ by: ["salonId"], where, _count: { id: true }, orderBy: { _count: { id: "desc" } }, take: 20 }),
+    prisma.websiteVisit.groupBy({ by: ["createdAt"], where, _count: { id: true }, orderBy: { createdAt: "asc" } }).then((rows) => {
+      const dayMap = {};
+      for (const row of rows) {
+        const day = new Date(row.createdAt).toISOString().slice(0, 10);
+        dayMap[day] = (dayMap[day] || 0) + row._count.id;
+      }
+      return Object.entries(dayMap).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
+    }),
+    prisma.websiteVisit.groupBy({ by: ["path"], where, _count: { id: true }, orderBy: { _count: { id: "desc" } }, take: 10 }),
+    prisma.websiteVisit.groupBy({ by: ["referrer"], where: { ...where, referrer: { not: null } }, _count: { id: true }, orderBy: { _count: { id: "desc" } }, take: 10 })
+  ]);
+
+  const salonIds = visitsBySalon.map((v) => v.salonId);
+  const salons = salonIds.length ? await prisma.salon.findMany({ where: { id: { in: salonIds } }, select: { id: true, name: true, slug: true } }) : [];
+  const salonMap = Object.fromEntries(salons.map((s) => [s.id, s]));
+
+  const topPages = visitsBySalon.map((v) => ({
+    salon: salonMap[v.salonId] || { name: "Unknown", slug: "-" },
+    visits: v._count.id
+  }));
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayCount = await prisma.websiteVisit.count({ where: { createdAt: { gte: todayStart }, ...(salonFilter ? { salonId: salonFilter } : {}) } });
+
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const yesterdayCount = await prisma.websiteVisit.count({ where: { createdAt: { gte: yesterdayStart, lt: todayStart }, ...(salonFilter ? { salonId: salonFilter } : {}) } });
+
+  res.json({
+    summary: {
+      totalVisits,
+      uniqueVisitors: uniqueIps,
+      todayVisits: todayCount,
+      yesterdayVisits: yesterdayCount,
+      period
+    },
+    topPages,
+    visitsByDay,
+    topPaths: visitsByPath.map((v) => ({ path: v.path, count: v._count.id })),
+    topReferrers: topReferrers.map((v) => ({ referrer: v.referrer, count: v._count.id }))
+  });
+}));

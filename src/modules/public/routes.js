@@ -252,6 +252,20 @@ publicRouter.post("/salon/:slug/enquiry", asyncHandler(async (req, res) => {
   res.status(201).json({ ok: true, id: enquiry.id });
 }));
 
+publicRouter.post("/salon/:slug/track", asyncHandler(async (req, res) => {
+  const { slug } = req.params;
+  const salon = await resolvePublicSalonBySlug(slug);
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+  const { path } = req.body;
+  const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || null;
+  const userAgent = req.headers["user-agent"] || null;
+  const referrer = req.headers["referer"] || null;
+  await prisma.websiteVisit.create({
+    data: { salonId: salon.id, path: path || "/", ip, userAgent, referrer }
+  });
+  res.json({ ok: true });
+}));
+
 registerPublicPhase3Routes(publicRouter);
 
 publicRouter.get("/plans", asyncHandler(async (req, res) => {
