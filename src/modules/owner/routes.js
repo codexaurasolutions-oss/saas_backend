@@ -1421,7 +1421,9 @@ ownerRouter.post("/support-tickets/:id/messages", requireSalonPermission("suppor
   const ticket = await prisma.supportTicket.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
   if (!ticket) return res.status(404).json({ message: "Support ticket not found" });
   if (ticket.status === "CLOSED") return res.status(400).json({ message: "Closed tickets cannot receive replies until reopened by support" });
+  if (ticket.status === "RESOLVED") return res.status(400).json({ message: "Resolved tickets cannot receive replies. Ask support to reopen first." });
 
+  const nextStatus = ticket.status === "PENDING" ? "OPEN" : ticket.status;
   await prisma.supportTicketMessage.create({
     data: {
       ticketId: ticket.id,
@@ -1431,7 +1433,7 @@ ownerRouter.post("/support-tickets/:id/messages", requireSalonPermission("suppor
       attachmentUrl: req.body.attachmentUrl || null
     }
   });
-  await prisma.supportTicket.update({ where: { id: ticket.id }, data: { status: "OPEN" } });
+  await prisma.supportTicket.update({ where: { id: ticket.id }, data: { status: nextStatus } });
   await prisma.supportTicketEvent.create({
     data: {
       ticketId: ticket.id,
@@ -1439,7 +1441,7 @@ ownerRouter.post("/support-tickets/:id/messages", requireSalonPermission("suppor
       actorName: req.user.name,
       details: req.body.attachmentUrl ? "Salon reply sent with attachment placeholder" : "Salon reply sent",
       fromStatus: ticket.status,
-      toStatus: "OPEN"
+      toStatus: nextStatus
     }
   });
   res.json(await prisma.supportTicket.findUnique({ where: { id: ticket.id }, include: { messages: { orderBy: { createdAt: "asc" } }, events: { orderBy: { createdAt: "asc" } } } }));

@@ -659,8 +659,18 @@ superAdminRouter.patch("/support-tickets/:id", asyncHandler(async (req, res) => 
     }
   }
 
+  const allowedFields = ["status", "priority", "internalNote", "assignedAgentName", "category"];
+  const safeData = {};
+  for (const key of allowedFields) {
+    if (req.body[key] !== undefined) safeData[key] = req.body[key];
+  }
+
+  if (Object.keys(safeData).length === 0) {
+    return res.status(400).json({ message: "No valid fields to update" });
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.supportTicket.update({ where: { id: req.params.id }, data: req.body });
+    const row = await tx.supportTicket.update({ where: { id: req.params.id }, data: safeData });
     const eventMessages = [];
     if (req.body.status && req.body.status !== ticket.status) {
       eventMessages.push({
@@ -699,7 +709,7 @@ superAdminRouter.patch("/support-tickets/:id", asyncHandler(async (req, res) => 
   res.json(updated);
 }));
 superAdminRouter.post("/support-tickets/:id/messages", asyncHandler(async (req, res) => {
-  const ticket = await prisma.supportTicket.findUnique({ where: { id: req.params.id } });
+  const ticket = await prisma.supportTicket.findUnique({ where: { id: req.params.id }, include: { salon: true } });
   if (!ticket) return res.status(404).json({ message: "Support ticket not found" });
   await prisma.$transaction(async (tx) => {
     await tx.supportTicketMessage.create({
@@ -723,6 +733,45 @@ superAdminRouter.post("/support-tickets/:id/messages", asyncHandler(async (req, 
       }
     });
   });
+
+  if (ticket.salon?.email && req.body.message) {
+    const frontendUrl = process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173";
+    const salonEmail = ticket.salon.email;
+    const ticketTitle = ticket.title;
+    const replyMessage = req.body.message;
+    const agentName = req.user.name;
+    const newStatus = req.body.status || "PENDING";
+    try {
+      await sendMail({
+        to: salonEmail,
+        subject: `ReSpark Support: New reply on "${ticketTitle}"`,
+        text: `Hi,\n\nSupport has replied to your ticket "${ticketTitle}".\n\nStatus: ${newStatus}\nAgent: ${agentName}\n\nMessage:\n${replyMessage}\n\nView your ticket: ${frontendUrl}/admin/support-tickets\n\nBest regards,\nReSpark Support Team`,
+        html: `
+          <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
+            <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
+              <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">ReSpark Support</p>
+              <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#0f172a;">New Reply on Your Ticket</h2>
+              <p style="font-size:16px;line-height:1.7;">Hi,</p>
+              <p style="font-size:16px;line-height:1.7;">Support has replied to your ticket <strong>"${ticketTitle}"</strong>.</p>
+              <div style="background:#f0fdfa;padding:18px 20px;border-radius:18px;margin:20px 0;border-left:4px solid #0f766e;">
+                <p style="margin:0 0 8px;font-size:15px;"><strong>Status:</strong> ${newStatus}</p>
+                <p style="margin:0 0 8px;font-size:15px;"><strong>Agent:</strong> ${agentName}</p>
+              </div>
+              <div style="background:#f8fafc;padding:18px 20px;border-radius:12px;margin:20px 0;border:1px solid #e2e8f0;">
+                <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#64748b;">MESSAGE</p>
+                <p style="margin:0;font-size:15px;line-height:1.7;white-space:pre-wrap;">${replyMessage}</p>
+              </div>
+              <p style="margin:28px 0;"><a href="${frontendUrl}/admin/support-tickets" style="display:inline-block;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:bold;">View Ticket</a></p>
+              <p style="font-size:13px;color:#516170;margin-top:24px;">Best regards,<br/><strong>ReSpark Support Team</strong></p>
+            </div>
+          </div>
+        `
+      });
+    } catch (err) {
+      console.error("Support reply email failed:", err);
+    }
+  }
+
   res.json(await prisma.supportTicket.findUnique({ where: { id: ticket.id }, include: { salon: true, messages: { orderBy: { createdAt: "asc" } }, events: { orderBy: { createdAt: "asc" } } } }));
 }));
 superAdminRouter.get("/settings", asyncHandler(async (req, res) => {
