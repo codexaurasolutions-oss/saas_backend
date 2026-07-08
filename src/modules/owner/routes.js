@@ -1452,6 +1452,18 @@ ownerRouter.get("/settings", requireSalonPermission("settings", "view"), async (
   res.json(row);
 });
 
+ownerRouter.post("/branding/logo", requireSalonPermission("settings", "edit"), upload.single("image"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "No image file provided" });
+  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  await prisma.salon.update({ where: { id: req.salonId }, data: { logoUrl: fileUrl } });
+  res.json({ url: fileUrl });
+});
+
+ownerRouter.delete("/branding/logo", requireSalonPermission("settings", "edit"), async (req, res) => {
+  await prisma.salon.update({ where: { id: req.salonId }, data: { logoUrl: null } });
+  res.json({ ok: true });
+});
+
 // ---- Tax Rates CRUD (stored in SalonSetting.advancedSettings.taxMapping) ----
 const getTaxMapping = async (salonId) => {
   const row = await prisma.salonSetting.findFirst({ where: { salonId, branchId: null } });

@@ -130,7 +130,7 @@ publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
       sections: Array.isArray(websiteConfig.sections) ? websiteConfig.sections : [],
       footerText: String(websiteConfig.footerText || ""),
       salonName: String(websiteConfig.salonName || ""),
-      logoUrl: String(websiteConfig.logoUrl || "")
+      logoUrl: String(websiteConfig.logoUrl || salon.logoUrl || "")
     },
     genericSettings,
     legalContent,

@@ -116,7 +116,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
   }
   const [salon, subscription] = membership
     ? await Promise.all([
-        prisma.salon.findUnique({ where: { id: membership.salonId }, select: { name: true, slug: true, featureFlags: true } }),
+        prisma.salon.findUnique({ where: { id: membership.salonId }, select: { name: true, slug: true, logoUrl: true, featureFlags: true } }),
         prisma.subscription.findFirst({
           where: { salonId: membership.salonId, status: { in: ["ACTIVE", "TRIAL"] } },
           include: { plan: true },
@@ -146,6 +146,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
           salonId: membership.salonId,
           salonName: salon?.name || membership.salon?.name || null,
           salonSlug: salon?.slug || null,
+          salonLogo: salon?.logoUrl || null,
           salonRole: membership.salonRole,
           permissions: mergedPermissions || {},
           featureFlags: mergedFeatureFlags,
