@@ -118,11 +118,7 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
 
   const startsAt = new Date();
   const endsAt = new Date(startsAt);
-  if (lead.paymentCompleted) {
-    endsAt.setDate(endsAt.getDate() + 30);
-  } else {
-    endsAt.setDate(endsAt.getDate() + Number(trialDays || 7));
-  }
+  endsAt.setDate(endsAt.getDate() + 30);
 
   const result = await prisma.$transaction(async (tx) => {
     const finalSalonName = salonName?.trim() || `${lead.name.split(" ")[0] || "Demo"} Salon`;
@@ -137,9 +133,9 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
         email: lead.email,
         phone: lead.phone,
         businessType: businessType || "Salon",
-        status: lead.paymentCompleted ? "ACTIVE" : "TRIAL",
-        trialStartsAt: lead.paymentCompleted ? null : startsAt,
-        trialEndsAt: lead.paymentCompleted ? null : endsAt,
+        status: "ACTIVE",
+        trialStartsAt: null,
+        trialEndsAt: null,
         featureFlags: plan.featureFlags || { pos: true, crm: true, reports: true, publicCatalog: true, digitalCatalog: true }
       }
     });
@@ -168,9 +164,9 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
       data: {
         salonId: salon.id,
         planId: plan.id,
-        status: lead.paymentCompleted ? "ACTIVE" : "TRIAL",
-        paymentStatus: lead.paymentCompleted ? "PAID" : "PENDING",
-        notes: lead.paymentCompleted ? "Auto-created paid onboarding workspace" : "Auto-created from approved demo lead",
+        status: "ACTIVE",
+        paymentStatus: "PAID",
+        notes: "Auto-created active onboarding workspace",
         startsAt,
         endsAt
       }
@@ -181,9 +177,9 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
         subscriptionId: subscription.id,
         action: lead.paymentCompleted ? "ONBOARDING_PAID" : "DEMO_APPROVED",
         createdBy: actorName,
-        toStatus: lead.paymentCompleted ? "ACTIVE" : "TRIAL",
-        toPaymentStatus: lead.paymentCompleted ? "PAID" : "PENDING",
-        notes: lead.paymentCompleted ? "30-day paid subscription activated from onboarding" : "7-day demo trial activated from demo lead approval"
+        toStatus: "ACTIVE",
+        toPaymentStatus: "PAID",
+        notes: lead.paymentCompleted ? "30-day paid subscription activated from onboarding" : "Active onboarding subscription activated from demo lead approval"
       }
     });
     const rawToken = await issuePasswordSetupToken({
