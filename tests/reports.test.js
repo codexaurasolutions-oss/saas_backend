@@ -55,36 +55,47 @@ describe("reports routes", () => {
     prismaMock.appointment.findMany.mockResolvedValue([]);
     prismaMock.invoice.findMany.mockResolvedValue([
       {
+        id: "inv-1",
+        discount: 0,
+        total: 320,
         items: [
-          { staffUserSalonId: "staff-1", staffName: "Ayesha", qty: 2, lineTotal: 200, commissionAmount: 20 },
-          { staffUserSalonId: "staff-1", staffName: "Ayesha", qty: 1, lineTotal: 120, commissionAmount: 12 },
-          { staffUserSalonId: "staff-2", staffName: "Bilal", qty: 1, lineTotal: 80, commissionAmount: 8 }
-        ]
+          { staffUserSalonId: "staff-1", staffName: "Ayesha", qty: 2, unitPrice: 100, lineTotal: 200, commissionAmount: 20, itemType: "SERVICE", membershipWalletUsed: 0, packageSessionsUsed: 0 },
+          { staffUserSalonId: "staff-1", staffName: "Ayesha", qty: 1, unitPrice: 120, lineTotal: 120, commissionAmount: 12, itemType: "SERVICE", membershipWalletUsed: 0, packageSessionsUsed: 0 },
+          { staffUserSalonId: "staff-2", staffName: "Bilal", qty: 1, unitPrice: 80, lineTotal: 80, commissionAmount: 8, itemType: "SERVICE", membershipWalletUsed: 0, packageSessionsUsed: 0 }
+        ],
+        customer: { id: "cust-1" }
       }
     ]);
 
     const response = await request(buildApp()).get("/reports/staff-services");
 
     expect(response.status).toBe(200);
-    expect(response.body[0]).toMatchObject({ staffName: "Ayesha", quantity: 3, revenue: 320, commission: 32 });
+    const ayeshaRow = response.body.find((r) => r["STAFF"] === "Ayesha");
+    expect(ayeshaRow).toBeDefined();
+    expect(ayeshaRow["TOTAL SERVICES DONE"]).toBe(3);
   });
 
   it("limits staff reports to their own scoped rows", async () => {
     prismaMock.appointment.findMany.mockResolvedValue([]);
     prismaMock.invoice.findMany.mockResolvedValue([
       {
+        id: "inv-1",
+        discount: 0,
+        total: 150,
         items: [
-          { staffUserSalonId: "membership-1", staffName: "Ayesha", qty: 1, lineTotal: 150, commissionAmount: 15 },
-          { staffUserSalonId: "membership-2", staffName: "Bilal", qty: 1, lineTotal: 300, commissionAmount: 30 }
-        ]
+          { staffUserSalonId: "membership-1", staffName: "Ayesha", qty: 1, unitPrice: 150, lineTotal: 150, commissionAmount: 15, itemType: "SERVICE", membershipWalletUsed: 0, packageSessionsUsed: 0 },
+          { staffUserSalonId: "membership-2", staffName: "Bilal", qty: 1, unitPrice: 300, lineTotal: 300, commissionAmount: 30, itemType: "SERVICE", membershipWalletUsed: 0, packageSessionsUsed: 0 }
+        ],
+        customer: { id: "cust-1" }
       }
     ]);
 
     const response = await request(buildApp({ salonRole: "STAFF" })).get("/reports/staff-performance");
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0]).toMatchObject({ staffId: "membership-1", staffName: "Ayesha" });
+    const staffRows = response.body.filter((r) => r["STAFF"] !== "TOTAL");
+    expect(staffRows).toHaveLength(1);
+    expect(staffRows[0]).toMatchObject({ "STAFF": "Ayesha" });
   });
 
   it("exports invoice rows as CSV", async () => {

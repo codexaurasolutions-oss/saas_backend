@@ -12,7 +12,9 @@ const prismaMock = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn()
-  }
+  },
+  invoiceItem: { findMany: vi.fn() },
+  payment: { findMany: vi.fn() }
 };
 
 vi.mock("../src/lib/prisma.js", () => ({ prisma: prismaMock }));
@@ -53,6 +55,8 @@ describe("owner customers", () => {
     prismaMock.customer.findMany.mockResolvedValue([]);
     prismaMock.customer.create.mockImplementation(async ({ data }) => ({ id: "customer-1", ...data }));
     prismaMock.customer.update.mockImplementation(async ({ data }) => ({ id: "customer-1", salonId: "salon-1", ...data }));
+    prismaMock.invoiceItem.findMany.mockResolvedValue([]);
+    prismaMock.payment.findMany.mockResolvedValue([]);
   });
 
   it("ignores branchId when creating a customer while still validating the branch", async () => {

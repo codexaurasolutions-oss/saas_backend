@@ -55,22 +55,22 @@ describe("new onboarding flow routes", () => {
 
   describe("Super Admin Endpoints", () => {
     it("marks a lead as contacted", async () => {
-      prismaMock.demoLead.findUnique.mockResolvedValue({ id: "lead-1", status: "PENDING" });
-      prismaMock.demoLead.update.mockResolvedValue({ id: "lead-1", status: "CONTACTED" });
+      prismaMock.demoLead.findUnique.mockResolvedValue({ id: "lead-1", status: "NEW" });
+      prismaMock.demoLead.update.mockResolvedValue({ id: "lead-1", status: "CONNECTED" });
 
       const response = await request(buildAdminApp()).post("/super-admin/demo-leads/lead-1/contacted");
 
       expect(response.status).toBe(200);
-      expect(response.body.status).toBe("CONTACTED");
+      expect(response.body.status).toBe("CONNECTED");
       expect(prismaMock.demoLead.update).toHaveBeenCalledWith({
         where: { id: "lead-1" },
-        data: { status: "CONTACTED" }
+        data: { status: "CONNECTED" }
       });
     });
 
     it("schedules a walkthrough meeting and sends an invitation email", async () => {
       prismaMock.demoLead.findUnique.mockResolvedValue({ id: "lead-1", email: "qa@example.com", name: "QA Client" });
-      prismaMock.demoLead.update.mockResolvedValue({ id: "lead-1", status: "MEETING_SCHEDULED" });
+      prismaMock.demoLead.update.mockResolvedValue({ id: "lead-1", status: "IN_PROGRESS" });
       sendMailMock.mockResolvedValue({ messageId: "mail-99" });
 
       const response = await request(buildAdminApp())
@@ -81,11 +81,11 @@ describe("new onboarding flow routes", () => {
         });
 
       expect(response.status).toBe(200);
-      expect(response.body.status).toBe("MEETING_SCHEDULED");
+      expect(response.body.status).toBe("IN_PROGRESS");
       expect(prismaMock.demoLead.update).toHaveBeenCalledWith({
         where: { id: "lead-1" },
         data: {
-          status: "MEETING_SCHEDULED",
+          status: "IN_PROGRESS",
           meetingScheduledAt: new Date("2026-08-01T12:00:00"),
           meetingLink: "https://meet.google.com/xyz"
         }

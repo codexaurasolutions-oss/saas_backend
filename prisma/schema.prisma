@@ -241,7 +241,7 @@ model Salon {
   city                String?
   country             String?
   timezone            String?
-  currency            String?              @default("PKR")
+  currency            String?              @default("INR")
   taxRate             Decimal?             @db.Decimal(5, 2)
   trialStartsAt       DateTime?
   trialEndsAt         DateTime?
@@ -1470,7 +1470,7 @@ model GlobalSetting {
   globalLogo           String?
   maintenanceMode      Boolean  @default(false)
   taxLabel             String   @default("Tax")
-  defaultCurrency      String   @default("PKR")
+  defaultCurrency      String   @default("INR")
   defaultCountry       String?
   defaultCity          String?
   defaultTimezone      String?
