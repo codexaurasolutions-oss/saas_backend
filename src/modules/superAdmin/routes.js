@@ -249,6 +249,7 @@ superAdminRouter.post("/plans", validate(schemas.plan), asyncHandler(async (req,
     invoiceLimit,
     storageLimit,
     isCustom,
+    isPopular,
     featureFlags
   } = req.body;
 
@@ -265,7 +266,8 @@ superAdminRouter.post("/plans", validate(schemas.plan), asyncHandler(async (req,
         monthlyPrice: toAmount(monthlyPrice),
         yearlyPrice: toAmount(yearlyPrice),
         storageLimit: storageLimit != null ? Number(storageLimit) : null,
-        isCustom: Boolean(isCustom)
+        isCustom: Boolean(isCustom),
+        isPopular: Boolean(isPopular)
       }
     });
     res.status(201).json(plan);
@@ -292,6 +294,7 @@ superAdminRouter.patch("/plans/:id", validate(schemas.plan), asyncHandler(async 
     invoiceLimit,
     storageLimit,
     isCustom,
+    isPopular,
     featureFlags
   } = req.body;
 
@@ -308,7 +311,8 @@ superAdminRouter.patch("/plans/:id", validate(schemas.plan), asyncHandler(async 
       monthlyPrice: toAmount(monthlyPrice),
       yearlyPrice: toAmount(yearlyPrice),
       storageLimit: storageLimit != null ? Number(storageLimit) : null,
-      isCustom: Boolean(isCustom)
+      isCustom: Boolean(isCustom),
+      isPopular: Boolean(isPopular)
     }
   }));
 }));
@@ -1008,4 +1012,55 @@ superAdminRouter.get("/traffic-analytics", asyncHandler(async (req, res) => {
     topPaths: visitsByPath.map((v) => ({ path: v.path, count: v._count.id })),
     topReferrers: topReferrers.map((v) => ({ referrer: v.referrer, count: v._count.id }))
   });
+}));
+
+superAdminRouter.get("/global-search", asyncHandler(async (req, res) => {
+  const q = (req.query.q || "").trim();
+  if (q.length < 2) return res.json({ results: [] });
+
+  const term = { contains: q, mode: "insensitive" };
+  const safe = (promise) => promise.catch(() => []);
+
+  const [salons, demoLeads, plans, users, subscriptions] = await Promise.all([
+    safe(prisma.salon.findMany({
+      where: { OR: [{ name: term }, { slug: term }, { email: term }, { phone: term }] },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, slug: true, email: true, phone: true }
+    })),
+    safe(prisma.demoLead.findMany({
+      where: { OR: [{ name: term }, { email: term }, { phone: term }, { company: term }] },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, email: true, phone: true, company: true, status: true }
+    })),
+    safe(prisma.plan.findMany({
+      where: { name: term },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, monthlyPrice: true, yearlyPrice: true }
+    })),
+    safe(prisma.user.findMany({
+      where: { OR: [{ name: term }, { email: term }] },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, email: true, systemRole: true }
+    })),
+    safe(prisma.subscription.findMany({
+      where: { OR: [{ salon: { name: term } }, { salon: { slug: term } }] },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      include: { salon: { select: { name: true, slug: true } }, plan: { select: { name: true } } }
+    }))
+  ]);
+
+  const results = [];
+  salons.forEach(s => results.push({ id: s.id, title: s.name, subtitle: `Slug: ${s.slug} • Email: ${s.email || "N/A"} • Phone: ${s.phone || "N/A"}`, module: "Salons", icon: "building", to: `/super-admin/salons?q=${encodeURIComponent(s.slug)}` }));
+  demoLeads.forEach(l => results.push({ id: l.id, title: l.name, subtitle: `Company: ${l.company || "N/A"} • Email: ${l.email} • Status: ${l.status}`, module: "Demo Leads", icon: "user-check", to: `/super-admin/demo-leads?q=${encodeURIComponent(l.email)}` }));
+  plans.forEach(p => results.push({ id: p.id, title: p.name, subtitle: `Monthly: ₹${p.monthlyPrice} • Yearly: ₹${p.yearlyPrice}`, module: "Subscription Plans", icon: "award", to: `/super-admin/plans` }));
+  users.forEach(u => results.push({ id: u.id, title: u.name, subtitle: `Email: ${u.email} • Role: ${u.systemRole}`, module: "Platform Users", icon: "user", to: `/super-admin/salons` }));
+  subscriptions.forEach(sub => results.push({ id: sub.id, title: `Subscription: ${sub.salon?.name || "Salon"}`, subtitle: `Plan: ${sub.plan?.name || "N/A"} • Status: ${sub.status} • Payment: ${sub.paymentStatus || "PENDING"}`, module: "Subscription Contracts", icon: "file-text", to: `/super-admin/subscriptions?q=${encodeURIComponent(sub.salon?.slug || "")}` }));
+
+  results.sort((a, b) => a.title.toLowerCase().indexOf(q.toLowerCase()) - b.title.toLowerCase().indexOf(q.toLowerCase()));
+  res.json({ results: results.slice(0, 20) });
 }));
