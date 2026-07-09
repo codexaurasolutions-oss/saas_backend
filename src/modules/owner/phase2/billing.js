@@ -208,7 +208,7 @@ export const registerBillingRoutes = (ownerRouter) => {
         const details = JSON.parse(entry.details || "{}");
         const amount = Number(details.amount || 0);
         advanceByCustomer.set(entry.customerId, (advanceByCustomer.get(entry.customerId) || 0) + amount);
-      } catch (e) {}
+      } catch (e) { console.warn("Corrupt timeline entry details:", entry.id); }
     });
 
     // Sum up advance USED as payment (Payment.mode = 'ADVANCE' on non-advance-invoices)
@@ -1142,7 +1142,7 @@ const sanitizeInvoicePhone = (phone) => {
         if (entry.details) {
           extra = JSON.parse(entry.details);
         }
-      } catch (e) {}
+      } catch (e) { console.warn("Corrupt timeline entry details:", entry?.id); }
       return {
         ...entry,
         amount: extra.amount || 0,
@@ -1247,7 +1247,7 @@ const sanitizeInvoicePhone = (phone) => {
         if (entry.details) {
           extra = JSON.parse(entry.details);
         }
-      } catch (e) {}
+      } catch (e) { console.warn("Corrupt timeline entry details:", entry?.id); }
       return {
         ...entry,
         amount: extra.amount || 0,
