@@ -113,41 +113,53 @@ superAdminRouter.get("/dashboard", asyncHandler(async (req, res) => {
 superAdminRouter.post("/salons", validate(schemas.salon), asyncHandler(async (req, res) => {
   const { ownerName, ownerEmail, ownerPassword, featureFlags, trialStartsAt, trialEndsAt, taxRate, ...salonData } = req.body;
 
-  const salon = await prisma.$transaction(async (tx) => {
-    const createdSalon = await tx.salon.create({
-      data: {
-        ...salonData,
-        taxRate: taxRate != null ? toAmount(taxRate) : null,
-        trialStartsAt: toDate(trialStartsAt),
-        trialEndsAt: toDate(trialEndsAt),
-        featureFlags: fullFeatureFlags(featureFlags)
+  if (ownerEmail && (!ownerName || !ownerPassword)) {
+    return res.status(400).json({ message: "Owner name, email, and password are all required to create an owner account." });
+  }
+
+  try {
+    const salon = await prisma.$transaction(async (tx) => {
+      const createdSalon = await tx.salon.create({
+        data: {
+          ...salonData,
+          taxRate: taxRate != null ? toAmount(taxRate) : null,
+          trialStartsAt: toDate(trialStartsAt),
+          trialEndsAt: toDate(trialEndsAt),
+          featureFlags: fullFeatureFlags(featureFlags)
+        }
+      });
+
+      if (ownerEmail && ownerName && ownerPassword) {
+        const owner = await tx.user.create({
+          data: {
+            name: ownerName,
+            email: ownerEmail,
+            passwordHash: await bcrypt.hash(ownerPassword, 10),
+            systemRole: "SALON_USER"
+          }
+        });
+
+        await tx.userSalon.create({
+          data: {
+            userId: owner.id,
+            salonId: createdSalon.id,
+            salonRole: "SALON_OWNER",
+            permissions: defaultOwnerPermissions
+          }
+        });
       }
+
+      return createdSalon;
     });
 
-    if (ownerEmail && ownerName && ownerPassword) {
-      const owner = await tx.user.create({
-        data: {
-          name: ownerName,
-          email: ownerEmail,
-          passwordHash: await bcrypt.hash(ownerPassword, 10),
-          systemRole: "SALON_USER"
-        }
-      });
-
-      await tx.userSalon.create({
-        data: {
-          userId: owner.id,
-          salonId: createdSalon.id,
-          salonRole: "SALON_OWNER",
-          permissions: defaultOwnerPermissions
-        }
-      });
+    res.status(201).json(salon);
+  } catch (err) {
+    if (err?.code === "P2002") {
+      const field = err?.meta?.target?.[0] || "field";
+      return res.status(409).json({ message: `A salon with this ${field} already exists. Please choose a different ${field}.` });
     }
-
-    return createdSalon;
-  });
-
-  res.status(201).json(salon);
+    throw err;
+  }
 }));
 
 superAdminRouter.get("/salons", asyncHandler(async (req, res) => {
@@ -240,22 +252,29 @@ superAdminRouter.post("/plans", validate(schemas.plan), asyncHandler(async (req,
     featureFlags
   } = req.body;
 
-  const plan = await prisma.plan.create({
-    data: {
-      name,
-      trialDays,
-      branchLimit,
-      userLimit,
-      customerLimit,
-      invoiceLimit,
-      featureFlags,
-      monthlyPrice: toAmount(monthlyPrice),
-      yearlyPrice: toAmount(yearlyPrice),
-      storageLimit: storageLimit != null ? Number(storageLimit) : null,
-      isCustom: Boolean(isCustom)
+  try {
+    const plan = await prisma.plan.create({
+      data: {
+        name,
+        trialDays,
+        branchLimit,
+        userLimit,
+        customerLimit,
+        invoiceLimit,
+        featureFlags,
+        monthlyPrice: toAmount(monthlyPrice),
+        yearlyPrice: toAmount(yearlyPrice),
+        storageLimit: storageLimit != null ? Number(storageLimit) : null,
+        isCustom: Boolean(isCustom)
+      }
+    });
+    res.status(201).json(plan);
+  } catch (err) {
+    if (err?.code === "P2002") {
+      return res.status(409).json({ message: `A plan named "${name}" already exists. Please choose a different name.` });
     }
-  });
-  res.status(201).json(plan);
+    throw err;
+  }
 }));
 superAdminRouter.get("/plans", asyncHandler(async (req, res) => {
   const plans = await prisma.plan.findMany({ orderBy: { createdAt: "desc" } });
@@ -292,6 +311,14 @@ superAdminRouter.patch("/plans/:id", validate(schemas.plan), asyncHandler(async 
       isCustom: Boolean(isCustom)
     }
   }));
+}));
+
+superAdminRouter.delete("/plans/:id", asyncHandler(async (req, res) => {
+  const plan = await prisma.plan.findUnique({ where: { id: req.params.id }, include: { subscriptions: { where: { status: { in: ["ACTIVE", "TRIAL"] } } } } });
+  if (!plan) return res.status(404).json({ message: "Plan not found" });
+  if (plan.subscriptions.length > 0) return res.status(400).json({ message: `Cannot delete "${plan.name}" — ${plan.subscriptions.length} active subscription(s) use this plan. Reassign them first.` });
+  await prisma.plan.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
 }));
 
 superAdminRouter.post("/subscriptions", validate(schemas.subscription), asyncHandler(async (req, res) => {

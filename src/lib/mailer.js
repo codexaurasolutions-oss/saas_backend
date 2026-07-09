@@ -2,7 +2,8 @@ import nodemailer from "nodemailer";
 
 let transporter;
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 10000);
+const DEFAULT_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 30000);
+const MAX_RETRIES = 2;
 
 const smtpConfigured = () =>
   Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
@@ -51,6 +52,13 @@ export const getMailer = () => {
 };
 
 export const mailerMode = () => (smtpConfigured() ? "smtp" : "json");
+export const mailerStatus = () => ({
+  mode: mailerMode(),
+  smtpConfigured: smtpConfigured(),
+  host: process.env.SMTP_HOST || null,
+  from: process.env.SMTP_FROM || null,
+  timeout: DEFAULT_TIMEOUT_MS
+});
 
 const withTimeout = async (promise, timeoutMs) => {
   let timer;
@@ -68,18 +76,34 @@ const withTimeout = async (promise, timeoutMs) => {
   }
 };
 
-export const sendMail = async (options) => {
-  const mail = await withTimeout(
-    getMailer().sendMail({
-      from: process.env.SMTP_FROM || "ReSpark <no-reply@respark.local>",
-      ...options
-    }),
-    DEFAULT_TIMEOUT_MS
-  );
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  return {
-    mode: mailerMode(),
-    messageId: mail.messageId || null,
-    preview: typeof mail.message === "string" ? mail.message : null
-  };
+export const sendMail = async (options) => {
+  let lastError;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const mail = await withTimeout(
+        getMailer().sendMail({
+          from: process.env.SMTP_FROM || "ReSpark <no-reply@respark.local>",
+          ...options
+        }),
+        DEFAULT_TIMEOUT_MS
+      );
+      if (attempt > 0) console.log(`[mailer] Email sent on attempt ${attempt + 1} to ${options.to}`);
+      return {
+        mode: mailerMode(),
+        messageId: mail.messageId || null,
+        preview: typeof mail.message === "string" ? mail.message : null
+      };
+    } catch (err) {
+      lastError = err;
+      console.error(`[mailer] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed for ${options.to}: ${err.message}`);
+      if (attempt < MAX_RETRIES) {
+        transporter = null;
+        await sleep(1000 * (attempt + 1));
+      }
+    }
+  }
+  console.error(`[mailer] All ${MAX_RETRIES + 1} attempts failed for ${options.to}. Giving up.`);
+  throw lastError;
 };
