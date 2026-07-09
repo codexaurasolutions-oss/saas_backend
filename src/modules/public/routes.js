@@ -278,7 +278,7 @@ publicRouter.get("/plans", asyncHandler(async (req, res) => {
 publicRouter.post("/demo-leads", validate(schemas.demoLead), asyncHandler(async (req, res) => {
   const { name, email, phone, company, message } = req.body;
   const lead = await prisma.demoLead.create({
-    data: { name, email, phone, company, message, status: "PENDING" }
+    data: { name, email, phone, company, message, status: "NEW" }
   });
   res.status(201).json(lead);
 }));

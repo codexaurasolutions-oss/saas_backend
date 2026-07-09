@@ -477,7 +477,7 @@ export const schemas = {
     body: z.object({
       name: z.string().min(2),
       email: emailLikeSchema,
-      phone: indianPhoneSchema,
+      phone: z.string().trim().min(5, "Phone must be at least 5 characters").max(20, "Phone must be at most 20 characters"),
       company: z.string().min(2).optional(),
       message: z.string().optional()
     })
