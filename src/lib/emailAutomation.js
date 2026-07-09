@@ -564,7 +564,7 @@ export const processLifecycleNotifications = async () => {
     if (isOn("membershipExpiry") && emailEnabled) {
       const expiringIn3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
       const expiringMemberships = await prisma.customerMembership.findMany({
-        where: { salonId, status: "ACTIVE", expiresAt: { gte: now, lte: expiringIn3Days } },
+        where: { salonId, status: "ACTIVE", endsAt: { gte: now, lte: expiringIn3Days } },
         include: { customer: true, membershipPlan: true }
       });
       for (const mem of expiringMemberships) {
@@ -585,7 +585,7 @@ export const processLifecycleNotifications = async () => {
     if (isOn("packageExpiryReminder") && emailEnabled) {
       const expiringIn3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
       const expiringPackages = await prisma.customerPackage.findMany({
-        where: { salonId, status: "ACTIVE", expiresAt: { gte: now, lte: expiringIn3Days } },
+        where: { salonId, status: "ACTIVE", endsAt: { gte: now, lte: expiringIn3Days } },
         include: { customer: true, package: true }
       });
       for (const pkg of expiringPackages) {
