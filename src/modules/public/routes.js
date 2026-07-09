@@ -325,8 +325,12 @@ publicRouter.post("/demo-checkout/:leadId/razorpay-order", asyncHandler(async (r
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
   if (!plan) return res.status(404).json({ message: "Plan not found" });
 
-  const keyId = process.env.RAZORPAY_KEY_ID || "rzp_test_TAAtuWKFZfp0f3";
-  const keySecret = process.env.RAZORPAY_SECRET_KEY || "kVhUs2zxmiveVbdkRDfPtnOQ";
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_SECRET_KEY;
+
+  if (!keyId || !keySecret) {
+    return res.status(503).json({ message: "Payment gateway is not configured. Please contact support to complete your subscription." });
+  }
 
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
   const response = await fetch("https://api.razorpay.com/v1/orders", {
@@ -363,7 +367,11 @@ publicRouter.post("/demo-checkout/:leadId/razorpay-order", asyncHandler(async (r
 publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res) => {
   const { leadId, planId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
   
-  const keySecret = process.env.RAZORPAY_SECRET_KEY || "kVhUs2zxmiveVbdkRDfPtnOQ";
+  const keySecret = process.env.RAZORPAY_SECRET_KEY;
+  
+  if (!keySecret) {
+    return res.status(503).json({ message: "Payment gateway is not configured." });
+  }
   
   const { default: crypto } = await import("node:crypto");
   const generated_signature = crypto
