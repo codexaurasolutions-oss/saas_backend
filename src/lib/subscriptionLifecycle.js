@@ -53,7 +53,7 @@ export const buildConversionEmail = ({ ownerName, salonName, planName, endsAt, l
   const text = [
     `Hi ${ownerName},`,
     "",
-    `${salonName} has been converted from trial to the ${planName} plan.`,
+    `${salonName} has been upgraded to the ${planName} plan.`,
     `Subscription active until: ${formatDate(endsAt)}`,
     "",
     `Login here: ${loginLink}`,
@@ -65,7 +65,7 @@ export const buildConversionEmail = ({ ownerName, salonName, planName, endsAt, l
     <div style="font-family:Arial,sans-serif;background:#f7f4ef;padding:32px;color:#18212c;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
         <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">Subscription Active</p>
-        <h1 style="margin:0 0 14px;font-size:30px;line-height:1.15;">Your trial has been converted successfully.</h1>
+        <h1 style="margin:0 0 14px;font-size:30px;line-height:1.15;">Your subscription has been upgraded successfully.</h1>
         <p style="font-size:16px;line-height:1.7;margin:0 0 18px;">Hi ${ownerName}, <strong>${salonName}</strong> is now active on the <strong>${planName}</strong> plan.</p>
         <div style="background:#ecfeff;border-radius:18px;padding:18px 20px;margin:0 0 20px;">
           <p style="margin:0 0 8px;"><strong>Active until:</strong> ${formatDate(endsAt)}</p>
@@ -146,7 +146,7 @@ export const convertDemoToPaid = async ({ subscriptionId, actorName, planId, end
   });
   if (!existing) return { error: { status: 404, message: "Subscription not found" } };
   if (!["TRIAL", "ACTIVE"].includes(existing.status)) {
-    return { error: { status: 400, message: "Only trial or active subscriptions can be converted through this flow." } };
+    return { error: { status: 400, message: "Only active or pending subscriptions can be upgraded through this flow." } };
   }
 
   const targetPlan = planId && planId !== existing.planId
