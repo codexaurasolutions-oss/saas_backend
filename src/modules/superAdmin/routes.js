@@ -87,7 +87,8 @@ superAdminRouter.get("/dashboard", asyncHandler(async (req, res) => {
     id: plan.id,
     name: plan.name,
     monthlyPrice: Number(plan.monthlyPrice),
-    yearlyPrice: Number(plan.yearlyPrice)
+    yearlyPrice: Number(plan.yearlyPrice),
+    isCustom: plan.isCustom
   }));
   const expiredSubscriptionsSummary = subscriptions.filter((sub) => sub.status === "EXPIRED").length;
 
@@ -865,9 +866,11 @@ superAdminRouter.post("/settings", asyncHandler(async (req, res) => {
   const existing = await prisma.globalSetting.findFirst();
   if (!existing) {
     const created = await prisma.globalSetting.create({ data });
+    await createAuditLog({ actorId: req.user.id, actorName: req.user.name, action: "SETTINGS_CREATED", entityType: "GlobalSetting", entityId: created.id, notes: "Global settings created" });
     return res.status(201).json(created);
   }
   const updated = await prisma.globalSetting.update({ where: { id: existing.id }, data });
+  await createAuditLog({ actorId: req.user.id, actorName: req.user.name, action: "SETTINGS_UPDATED", entityType: "GlobalSetting", entityId: existing.id, notes: `Global settings updated by ${req.user.name}` });
   return res.json(updated);
 }));
 superAdminRouter.get("/audit-logs", asyncHandler(async (req, res) => {
