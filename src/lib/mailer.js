@@ -81,14 +81,35 @@ const withTimeout = async (promise, timeoutMs) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const stripHtml = (html) => {
+  if (!html) return "";
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export const sendMail = async (options) => {
   let lastError;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      const headers = {
+        "X-Mailer": "ReSpark Mailer v1.0",
+        "X-Priority": "3",
+        "X-MSMail-Priority": "Normal",
+        "List-Unsubscribe": `<mailto:support@respark.in?subject=unsubscribe>`,
+        "Reply-To": process.env.SMTP_FROM || "ReSpark <no-reply@respark.local>",
+        ...options.headers
+      };
       const mail = await withTimeout(
         getMailer().sendMail({
           from: process.env.SMTP_FROM || "ReSpark <no-reply@respark.local>",
-          ...options
+          ...options,
+          headers,
+          text: options.text || stripHtml(options.html || ""),
+          attachments: options.attachments || []
         }),
         DEFAULT_TIMEOUT_MS
       );
