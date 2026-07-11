@@ -566,31 +566,28 @@ superAdminRouter.post("/demo-leads/:id/schedule-meeting", asyncHandler(async (re
     timeStyle: "short"
   });
 
-  try {
-    await sendMail({
-      to: lead.email,
-      subject: "Meeting Scheduled: ReSpark Product Demo Walkthrough",
-      text: `Hi ${lead.name},\n\nWe have scheduled a meeting to demonstrate the ReSpark software with you.\n\nDate & Time: ${formattedDate}\nMeeting Link: ${meetingLink}\n\nWe look forward to meeting you!\n\nBest regards,\nReSpark Team`,
-      html: `
-        <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
-          <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-            <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#c2410c;margin:0 0 12px;">ReSpark Walkthrough</p>
-            <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#0f766e;">ReSpark Product Demo Meeting</h2>
-            <p style="font-size:16px;line-height:1.7;">Hi <strong>${lead.name}</strong>,</p>
-            <p style="font-size:16px;line-height:1.7;">We have scheduled a meeting for your ReSpark product demo walkthrough.</p>
-            <div style="background:#fff7ed;padding:18px 20px;border-radius:18px;margin:20px 0;border-left:4px solid #c2410c;">
-              <p style="margin:0 0 8px;font-size:15px;"><strong>Date & Time:</strong> ${formattedDate}</p>
-              <p style="margin:0;font-size:15px;"><strong>Meeting Link:</strong> <a href="${meetingLink}" style="color:#0f766e;font-weight:bold;text-decoration:underline;">Join Meeting</a></p>
-            </div>
-            <p style="font-size:16px;line-height:1.7;">We look forward to showing you how ReSpark can optimize your salon operations!</p>
-            <p style="margin-top:24px;font-size:14px;color:#516170;">Best regards,<br/><strong>ReSpark Team</strong></p>
+  sendMail({
+    to: lead.email,
+    subject: "Meeting Scheduled: ReSpark Product Demo Walkthrough",
+    text: `Hi ${lead.name},\n\nWe have scheduled a meeting to demonstrate the ReSpark software with you.\n\nDate & Time: ${formattedDate}\nMeeting Link: ${meetingLink}\n\nWe look forward to meeting you!\n\nBest regards,\nReSpark Team`,
+    html: `
+      <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
+        <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
+          <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#c2410c;margin:0 0 12px;">ReSpark Walkthrough</p>
+          <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#0f766e;">ReSpark Product Demo Meeting</h2>
+          <p style="font-size:16px;line-height:1.7;">Hi <strong>${lead.name}</strong>,</p>
+          <p style="font-size:16px;line-height:1.7;">We have scheduled a meeting for your ReSpark product demo walkthrough.</p>
+          <div style="background:#fff7ed;padding:18px 20px;border-radius:18px;margin:20px 0;border-left:4px solid #c2410c;">
+            <p style="margin:0 0 8px;font-size:15px;"><strong>Date & Time:</strong> ${formattedDate}</p>
+            <p style="margin:0;font-size:15px;"><strong>Meeting Link:</strong> <a href="${meetingLink}" style="color:#0f766e;font-weight:bold;text-decoration:underline;">Join Meeting</a></p>
           </div>
+          <p style="font-size:16px;line-height:1.7;">We look forward to showing you how ReSpark can optimize your salon operations!</p>
+          <p style="margin-top:24px;font-size:14px;color:#516170;">Best regards,<br/><strong>ReSpark Team</strong></p>
         </div>
-      `
-    });
-  } catch (err) {
-    console.error("Email send failed for demo meeting schedule:", err);
-  }
+      </div>
+    `
+  }).then(() => console.log(`[demo-leads] Meeting email sent to ${lead.email}`))
+    .catch((err) => console.error(`[demo-leads] Meeting email failed for ${lead.email}:`, err.message));
 
   return res.json(updated);
 }));
@@ -612,29 +609,26 @@ superAdminRouter.post("/demo-leads/:id/send-purchase-link", asyncHandler(async (
   const frontendUrl = process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173";
   const checkoutUrl = `${frontendUrl}/demo-checkout/${lead.id}/${planId}`;
 
-  try {
-    await sendMail({
-      to: lead.email,
-      subject: `Select your ReSpark Subscription Plan: ${plan.name}`,
-      text: `Hi ${lead.name},\n\nThank you for attending the ReSpark product walkthrough. Please use the secure link below to purchase your subscription for the ${plan.name} plan:\n\n${checkoutUrl}\n\nBest regards,\nReSpark Team`,
-      html: `
-        <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
-          <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-            <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">ReSpark Subscription Setup</p>
-            <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#c2410c;">Complete your ReSpark Subscription</h2>
-            <p style="font-size:16px;line-height:1.7;">Hi <strong>${lead.name}</strong>,</p>
-            <p style="font-size:16px;line-height:1.7;">Thank you for attending the product demo. We hope you are excited to scale your salon with ReSpark!</p>
-            <p style="font-size:16px;line-height:1.7;">Please use the secure link below to review your selected <strong>${plan.name}</strong> plan and complete your checkout:</p>
-            <p style="margin:28px 0;"><a href="${checkoutUrl}" style="display:inline-block;background:linear-gradient(135deg,#c2410c,#0f766e);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:bold;">Proceed to Subscription Checkout</a></p>
-            <p style="font-size:13px;color:#516170;">If the button doesn't work, copy and paste this link in your browser:<br/><a href="${checkoutUrl}" style="color:#0f766e;">${checkoutUrl}</a></p>
-            <p style="margin-top:24px;font-size:14px;color:#516170;">Best regards,<br/><strong>ReSpark Team</strong></p>
-          </div>
+  sendMail({
+    to: lead.email,
+    subject: `Select your ReSpark Subscription Plan: ${plan.name}`,
+    text: `Hi ${lead.name},\n\nThank you for attending the ReSpark product walkthrough. Please use the secure link below to purchase your subscription for the ${plan.name} plan:\n\n${checkoutUrl}\n\nBest regards,\nReSpark Team`,
+    html: `
+      <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
+        <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
+          <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">ReSpark Subscription Setup</p>
+          <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#c2410c;">Complete your ReSpark Subscription</h2>
+          <p style="font-size:16px;line-height:1.7;">Hi <strong>${lead.name}</strong>,</p>
+          <p style="font-size:16px;line-height:1.7;">Thank you for attending the product demo. We hope you are excited to scale your salon with ReSpark!</p>
+          <p style="font-size:16px;line-height:1.7;">Please use the secure link below to review your selected <strong>${plan.name}</strong> plan and complete your checkout:</p>
+          <p style="margin:28px 0;"><a href="${checkoutUrl}" style="display:inline-block;background:linear-gradient(135deg,#c2410c,#0f766e);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:bold;">Proceed to Subscription Checkout</a></p>
+          <p style="font-size:13px;color:#516170;">If the button doesn't work, copy and paste this link in your browser:<br/><a href="${checkoutUrl}" style="color:#0f766e;">${checkoutUrl}</a></p>
+          <p style="margin-top:24px;font-size:14px;color:#516170;">Best regards,<br/><strong>ReSpark Team</strong></p>
         </div>
-      `
-    });
-  } catch (err) {
-    console.error("Email send failed for demo purchase link:", err);
-  }
+      </div>
+    `
+  }).then(() => console.log(`[demo-leads] Purchase link email sent to ${lead.email}`))
+    .catch((err) => console.error(`[demo-leads] Purchase link email failed for ${lead.email}:`, err.message));
 
   return res.json(updated);
 }));
@@ -773,35 +767,31 @@ superAdminRouter.post("/support-tickets/:id/messages", asyncHandler(async (req, 
     const replyMessage = req.body.message;
     const agentName = req.user.name;
     const newStatus = req.body.status || "PENDING";
-    try {
-      await sendMail({
-        to: salonEmail,
-        subject: `ReSpark Support: New reply on "${ticketTitle}"`,
-        text: `Hi,\n\nSupport has replied to your ticket "${ticketTitle}".\n\nStatus: ${newStatus}\nAgent: ${agentName}\n\nMessage:\n${replyMessage}\n\nView your ticket: ${frontendUrl}/admin/support-tickets\n\nBest regards,\nReSpark Support Team`,
-        html: `
-          <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
-            <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-              <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">ReSpark Support</p>
-              <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#0f172a;">New Reply on Your Ticket</h2>
-              <p style="font-size:16px;line-height:1.7;">Hi,</p>
-              <p style="font-size:16px;line-height:1.7;">Support has replied to your ticket <strong>"${ticketTitle}"</strong>.</p>
-              <div style="background:#f0fdfa;padding:18px 20px;border-radius:18px;margin:20px 0;border-left:4px solid #0f766e;">
-                <p style="margin:0 0 8px;font-size:15px;"><strong>Status:</strong> ${newStatus}</p>
-                <p style="margin:0 0 8px;font-size:15px;"><strong>Agent:</strong> ${agentName}</p>
-              </div>
-              <div style="background:#f8fafc;padding:18px 20px;border-radius:12px;margin:20px 0;border:1px solid #e2e8f0;">
-                <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#64748b;">MESSAGE</p>
-                <p style="margin:0;font-size:15px;line-height:1.7;white-space:pre-wrap;">${replyMessage}</p>
-              </div>
-              <p style="margin:28px 0;"><a href="${frontendUrl}/admin/support-tickets" style="display:inline-block;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:bold;">View Ticket</a></p>
-              <p style="font-size:13px;color:#516170;margin-top:24px;">Best regards,<br/><strong>ReSpark Support Team</strong></p>
+    sendMail({
+      to: salonEmail,
+      subject: `ReSpark Support: New reply on "${ticketTitle}"`,
+      text: `Hi,\n\nSupport has replied to your ticket "${ticketTitle}".\n\nStatus: ${newStatus}\nAgent: ${agentName}\n\nMessage:\n${replyMessage}\n\nView your ticket: ${frontendUrl}/admin/support-tickets\n\nBest regards,\nReSpark Support Team`,
+      html: `
+        <div style="font-family:Arial,sans-serif;padding:32px;background:#f7f4ef;color:#18212c;">
+          <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
+            <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">ReSpark Support</p>
+            <h2 style="margin:0 0 14px;font-size:24px;line-height:1.25;color:#0f172a;">New Reply on Your Ticket</h2>
+            <p style="font-size:16px;line-height:1.7;">Hi,</p>
+            <p style="font-size:16px;line-height:1.7;">Support has replied to your ticket <strong>"${ticketTitle}"</strong>.</p>
+            <div style="background:#f0fdfa;padding:18px 20px;border-radius:18px;margin:20px 0;border-left:4px solid #0f766e;">
+              <p style="margin:0 0 8px;font-size:15px;"><strong>Status:</strong> ${newStatus}</p>
+              <p style="margin:0 0 8px;font-size:15px;"><strong>Agent:</strong> ${agentName}</p>
             </div>
+            <div style="background:#f8fafc;padding:18px 20px;border-radius:12px;margin:20px 0;border:1px solid #e2e8f0;">
+              <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#64748b;">MESSAGE</p>
+              <p style="margin:0;font-size:15px;line-height:1.7;white-space:pre-wrap;">${replyMessage}</p>
+            </div>
+            <p style="margin:28px 0;"><a href="${frontendUrl}/admin/support-tickets" style="display:inline-block;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:bold;">View Ticket</a></p>
+            <p style="font-size:13px;color:#516170;margin-top:24px;">Best regards,<br/><strong>ReSpark Support Team</strong></p>
           </div>
-        `
-      });
-    } catch (err) {
-      console.error("Support reply email failed:", err);
-    }
+        </div>
+      `
+    }).catch((err) => console.error("Support reply email failed:", err.message));
   }
 
   res.json(await prisma.supportTicket.findUnique({ where: { id: ticket.id }, include: { salon: true, messages: { orderBy: { createdAt: "asc" } }, events: { orderBy: { createdAt: "asc" } } } }));

@@ -2,8 +2,8 @@ import nodemailer from "nodemailer";
 
 let transporter;
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 30000);
-const MAX_RETRIES = 2;
+const DEFAULT_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 10000);
+const MAX_RETRIES = 1;
 
 const smtpConfigured = () =>
   Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
@@ -16,6 +16,9 @@ const createTransporter = () => {
     if (isGmail) {
       return nodemailer.createTransport({
         service: "gmail",
+        connectionTimeout: DEFAULT_TIMEOUT_MS,
+        greetingTimeout: DEFAULT_TIMEOUT_MS,
+        socketTimeout: DEFAULT_TIMEOUT_MS,
         auth: process.env.SMTP_USER
           ? {
               user: process.env.SMTP_USER,
