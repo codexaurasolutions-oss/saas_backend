@@ -40,6 +40,8 @@ export const registerEcommerceRoutes = (ownerRouter) => {
       allowOnlinePayment: req.body.allowOnlinePayment ?? false,
       pickupEnabled: req.body.pickupEnabled ?? true,
       deliveryEnabled: req.body.deliveryEnabled ?? false,
+      deliveryFee: Number(req.body.deliveryFee) || 0,
+      taxPercent: Number(req.body.taxPercent) || 0,
       deliveryNote: req.body.deliveryNote || null,
       supportPhone: req.body.supportPhone || null,
       termsText: req.body.termsText || null

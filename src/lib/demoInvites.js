@@ -31,19 +31,12 @@ const buildInviteLink = ({ token, loginAccessToken, email }) =>
 const buildOwnerLoginLink = ({ email, loginAccessToken }) =>
   `${frontendBaseUrl()}/login?email=${encodeURIComponent(email)}&access=${encodeURIComponent(loginAccessToken)}`;
 
-export const buildInviteEmail = ({ ownerName, salonName, trialEndsAt, inviteLink, loginLink }) => {
-  const trialEndLabel = new Date(trialEndsAt).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric"
-  });
-
-  const subject = `Your ReSpark demo is ready for ${salonName}`;
+export const buildInviteEmail = ({ ownerName, salonName, inviteLink, loginLink }) => {
+  const subject = `Your ReSpark workspace is ready for ${salonName}`;
   const text = [
     `Hi ${ownerName},`,
     "",
-    `Your 7-day ReSpark trial for ${salonName} is now ready.`,
-    `Trial ends: ${trialEndLabel}`,
+    `Your ReSpark workspace for ${salonName} is now ready.`,
     "",
     "Use this secure link to set your password:",
     inviteLink,
@@ -58,12 +51,9 @@ export const buildInviteEmail = ({ ownerName, salonName, trialEndsAt, inviteLink
   const html = `
     <div style="font-family:Arial,sans-serif;background:#f7f4ef;padding:32px;color:#18212c;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#8a4b08;margin:0 0 12px;">ReSpark Demo Access</p>
-        <h1 style="margin:0 0 14px;font-size:32px;line-height:1.15;">Your ${salonName} trial is ready.</h1>
-        <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${ownerName}, your 7-day trial environment has been created. Set your password using the secure link below and then access your panel with your account email.</p>
-        <div style="background:#fff7ed;border-radius:18px;padding:18px 20px;margin:0 0 20px;">
-          <p style="margin:0;"><strong>Trial ends:</strong> ${trialEndLabel}</p>
-        </div>
+        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">ReSpark Subscription Activated</p>
+        <h1 style="margin:0 0 14px;font-size:32px;line-height:1.15;">Your ${salonName} workspace is ready.</h1>
+        <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${ownerName}, your subscription has been activated and your workspace has been created. Set your password using the secure link below and then access your panel with your account email.</p>
         <p style="margin:0 0 18px;"><a href="${inviteLink}" style="display:inline-block;background:linear-gradient(135deg,#c2410c,#0f766e);color:#fff;text-decoration:none;padding:14px 20px;border-radius:999px;font-weight:700;">Set your password</a></p>
         <p style="font-size:14px;line-height:1.7;margin:0 0 12px;">After setting the password, open your login page here:</p>
         <p style="margin:0 0 16px;"><a href="${loginLink}" style="color:#0f766e;">${loginLink}</a></p>
@@ -214,7 +204,6 @@ export const approveDemoLead = async ({ leadId, actorName, trialDays = 7, planId
   const emailContent = buildInviteEmail({
     ownerName: result.owner.name,
     salonName: result.salon.name,
-    trialEndsAt: result.subscription.endsAt,
     inviteLink,
     loginLink
   });
@@ -287,10 +276,8 @@ export const resendDemoInvite = async ({ leadId }) => {
   const emailContent = buildInviteEmail({
     ownerName: owner.name,
     salonName: salon.name,
-    trialEndsAt: subscription.endsAt,
     inviteLink,
-    loginLink,
-    salonId: salon.id
+    loginLink
   });
 
   let delivery;

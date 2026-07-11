@@ -45,6 +45,34 @@ const ensureBranch = async (salonId, branchId) => {
   return branch;
 };
 
+ownerRouter.get("/subscription", requireSalonPermission("dashboard", "view"), async (req, res) => {
+  const subscription = await prisma.subscription.findFirst({
+    where: { salonId: req.salonId },
+    include: { plan: true },
+    orderBy: { endsAt: "desc" }
+  });
+  if (!subscription) return res.json({ active: false, message: "No subscription found" });
+  const now = new Date();
+  const daysRemaining = Math.max(0, Math.ceil((new Date(subscription.endsAt) - now) / (1000 * 60 * 60 * 24)));
+  res.json({
+    active: subscription.status === "ACTIVE" || subscription.status === "TRIAL",
+    status: subscription.status,
+    paymentStatus: subscription.paymentStatus,
+    startsAt: subscription.startsAt,
+    endsAt: subscription.endsAt,
+    daysRemaining,
+    plan: subscription.plan ? {
+      id: subscription.plan.id,
+      name: subscription.plan.name,
+      monthlyPrice: subscription.plan.monthlyPrice,
+      branchLimit: subscription.plan.branchLimit,
+      userLimit: subscription.plan.userLimit,
+      customerLimit: subscription.plan.customerLimit,
+      invoiceLimit: subscription.plan.invoiceLimit
+    } : null
+  });
+});
+
 const normalizeDateValue = (value) => (value ? new Date(value) : null);
 const sanitizeTagList = (value) => Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : [];
 const buildCustomerData = (payload, salonId) => ({

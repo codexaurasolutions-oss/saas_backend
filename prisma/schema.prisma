@@ -188,6 +188,28 @@ enum LeaveStatus {
   CANCELLED
 }
 
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  HALF_DAY
+  ABSENT
+  LEAVE
+  WORKING
+  COMPLETED_SHIFT
+}
+
+enum AttendanceVerificationMethod {
+  MANUAL
+  SELFIE_GPS
+  GPS_ONLY
+}
+
+enum AttendanceGeoStatus {
+  INSIDE
+  OUTSIDE
+  NOT_CAPTURED
+}
+
 enum PayrollStatus {
   DRAFT
   CALCULATED
@@ -218,6 +240,7 @@ model User {
   isActive               Boolean             @default(true)
   passwordSetupRequired  Boolean             @default(false)
   isDemoAccount          Boolean             @default(false)
+  pagePermissions        Json?
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
   memberships            UserSalon[]
@@ -341,6 +364,9 @@ model UserSalon {
   bankBranch           String?
   accountNumber        String?
   ifscCode             String?
+  attendanceEnabled            Boolean     @default(false)
+  attendanceEnrollmentPhotoUrl String?
+  attendanceEnrollmentCapturedAt DateTime?
   user                 User                      @relation(fields: [userId], references: [id])
   salon                Salon                     @relation(fields: [salonId], references: [id])
   branch               Branch?                   @relation(fields: [branchId], references: [id])
@@ -362,6 +388,7 @@ model UserSalon {
   expensesApproved     Expense[]                 @relation("ExpenseApprovedBy")
   attendanceRecords    AttendanceRecord[]        @relation("AttendanceStaff")
   attendanceRecordedBy AttendanceRecord[]        @relation("AttendanceRecordedBy")
+  attendanceManualEdits AttendanceRecord[]       @relation("AttendanceManualEditedBy")
   leaveRequests        LeaveRequest[]            @relation("LeaveRequestedBy")
   leaveApproved        LeaveRequest[]            @relation("LeaveApprovedBy")
   incentiveRules       IncentiveRule[]
@@ -463,6 +490,9 @@ model Branch {
   address          String?
   businessHours    String?
   weeklyOff        String?
+  latitude               Decimal?  @db.Decimal(10, 7)
+  longitude              Decimal?  @db.Decimal(10, 7)
+  geofenceRadiusMeters   Int       @default(75)
   isActive         Boolean               @default(true)
   createdAt        DateTime              @default(now())
   salon            Salon                 @relation(fields: [salonId], references: [id])
@@ -1236,6 +1266,8 @@ model EcommerceSetting {
   allowOnlinePayment    Boolean  @default(false)
   pickupEnabled         Boolean  @default(true)
   deliveryEnabled       Boolean  @default(false)
+  deliveryFee           Float    @default(0)
+  taxPercent            Float    @default(0)
   deliveryNote          String?
   supportPhone          String?
   termsText             String?
@@ -1760,21 +1792,43 @@ model Expense {
 }
 
 model AttendanceRecord {
-  id                   String    @id @default(cuid())
-  salonId              String
-  branchId             String?
-  userSalonId          String
-  createdByMembershipId String?
-  checkInAt            DateTime
-  checkOutAt           DateTime?
-  workedMinutes        Int?
-  note                 String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  salon                Salon     @relation(fields: [salonId], references: [id])
-  branch               Branch?   @relation(fields: [branchId], references: [id])
-  userSalon            UserSalon @relation("AttendanceStaff", fields: [userSalonId], references: [id])
-  createdByMembership  UserSalon? @relation("AttendanceRecordedBy", fields: [createdByMembershipId], references: [id])
+  id                           String                      @id @default(cuid())
+  salonId                      String
+  branchId                     String?
+  userSalonId                  String
+  createdByMembershipId        String?
+  manualEditedByMembershipId   String?
+  attendanceDate               DateTime
+  status                       AttendanceStatus            @default(WORKING)
+  verificationMethod           AttendanceVerificationMethod @default(MANUAL)
+  geoStatus                    AttendanceGeoStatus         @default(NOT_CAPTURED)
+  checkInAt                    DateTime
+  checkOutAt                   DateTime?
+  workedMinutes                Int?
+  overtimeMinutes              Int?                        @default(0)
+  checkInLatitude              Decimal?                    @db.Decimal(10, 7)
+  checkInLongitude             Decimal?                    @db.Decimal(10, 7)
+  checkInAccuracyMeters        Decimal?                    @db.Decimal(8, 2)
+  checkInSelfieUrl             String?
+  checkOutLatitude             Decimal?                    @db.Decimal(10, 7)
+  checkOutLongitude            Decimal?                    @db.Decimal(10, 7)
+  checkOutAccuracyMeters       Decimal?                    @db.Decimal(8, 2)
+  checkOutSelfieUrl            String?
+  note                         String?
+  adminRemark                  String?
+  manualEdited                 Boolean                     @default(false)
+  manualEditedAt               DateTime?
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+
+  salon                        Salon                       @relation(fields: [salonId], references: [id])
+  branch                       Branch?                     @relation(fields: [branchId], references: [id])
+  userSalon                    UserSalon                   @relation("AttendanceStaff", fields: [userSalonId], references: [id])
+  createdByMembership          UserSalon?                  @relation("AttendanceRecordedBy", fields: [createdByMembershipId], references: [id])
+  manualEditedByMembership     UserSalon?                  @relation("AttendanceManualEditedBy", fields: [manualEditedByMembershipId], references: [id])
+
+  @@unique([salonId, userSalonId, attendanceDate])
+  @@index([salonId, attendanceDate])
 }
 
 model LeaveRequest {

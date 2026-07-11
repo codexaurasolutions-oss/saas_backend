@@ -297,7 +297,10 @@ export const schemas = {
       email: optionalEmailLike,
       address: optionalString,
       businessHours: optionalString,
-      weeklyOff: optionalString
+      weeklyOff: optionalString,
+      latitude: z.number().min(-90).max(90).optional().nullable(),
+      longitude: z.number().min(-180).max(180).optional().nullable(),
+      geofenceRadiusMeters: z.number().min(10).max(5000).optional()
     })
   }),
   service: z.object({
@@ -586,6 +589,7 @@ export const schemas = {
       sellingPrice: z.number().min(0),
       salePrice: z.number().min(0).optional(),
       minStock: z.number().min(0).optional(),
+      currentStock: z.number().min(0).optional(),
       expiryDate: optionalDateString,
       allowNegativeStock: z.boolean().optional(),
       featured: z.boolean().optional(),
@@ -882,6 +886,8 @@ export const schemas = {
       allowOnlinePayment: z.boolean().optional(),
       pickupEnabled: z.boolean().optional(),
       deliveryEnabled: z.boolean().optional(),
+      deliveryFee: z.number().min(0).optional(),
+      taxPercent: z.number().min(0).max(100).optional(),
       deliveryNote: optionalString,
       supportPhone: optionalIndianPhoneSchema,
       termsText: optionalString
@@ -905,8 +911,10 @@ export const schemas = {
       customerPhone: indianPhoneSchema,
       customerEmail: optionalEmailLike,
       note: optionalString,
-      paymentMode: z.enum(["COD", "PAY_AT_SALON", "ONLINE_PLACEHOLDER"]).default("PAY_AT_SALON"),
+      paymentMode: z.enum(["COD", "PAY_AT_SALON", "ONLINE", "ONLINE_PLACEHOLDER"]).default("PAY_AT_SALON"),
       fulfillmentMethod: z.enum(["PICKUP", "DELIVERY"]).default("PICKUP"),
+      taxPercent: z.number().min(0).max(100).optional(),
+      deliveryFee: z.number().min(0).optional(),
       couponCode: optionalString,
       giftCardCode: optionalString,
       items: z.array(cartItemSchema).min(1)
@@ -1154,9 +1162,22 @@ export const schemas = {
     body: z.object({
       userSalonId: idSchema,
       branchId: z.string().nullable().optional(),
+      attendanceDate: optionalDateString,
       checkInAt: optionalDateString,
       checkOutAt: optionalDateString,
-      note: optionalString
+      status: z.enum(["PRESENT", "LATE", "HALF_DAY", "ABSENT", "LEAVE", "WORKING", "COMPLETED_SHIFT"]).optional(),
+      verificationMethod: z.enum(["MANUAL", "SELFIE_GPS", "GPS_ONLY"]).optional(),
+      geoStatus: z.enum(["INSIDE", "OUTSIDE", "NOT_CAPTURED"]).optional(),
+      note: optionalString,
+      adminRemark: optionalString,
+      checkInLatitude: z.number().optional(),
+      checkInLongitude: z.number().optional(),
+      checkInAccuracyMeters: z.number().optional(),
+      checkInSelfieUrl: z.string().optional(),
+      checkOutLatitude: z.number().optional(),
+      checkOutLongitude: z.number().optional(),
+      checkOutAccuracyMeters: z.number().optional(),
+      checkOutSelfieUrl: z.string().optional()
     })
   }),
   leaveRequest: z.object({
@@ -1171,6 +1192,39 @@ export const schemas = {
   leaveStatus: z.object({
     body: z.object({
       note: optionalString
+    })
+  }),
+  attendanceSelfAction: z.object({
+    body: z.object({
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      accuracyMeters: z.number().min(0).max(5000).optional(),
+      selfieUrl: z.string().optional(),
+      note: optionalString
+    })
+  }),
+  attendanceManualUpdate: z.object({
+    body: z.object({
+      attendanceDate: optionalDateString,
+      checkInAt: optionalDateString,
+      checkOutAt: optionalDateString,
+      status: z.enum(["PRESENT", "LATE", "HALF_DAY", "ABSENT", "LEAVE", "WORKING", "COMPLETED_SHIFT"]).optional(),
+      note: optionalString,
+      adminRemark: optionalString,
+      reason: z.string().min(3, "Reason is required (min 3 characters)")
+    })
+  }),
+  attendanceSettings: z.object({
+    body: z.object({
+      officeStartTime: z.string().optional(),
+      officeEndTime: z.string().optional(),
+      lateAfterTime: z.string().optional(),
+      halfDayMinutes: z.number().optional(),
+      minimumWorkingMinutes: z.number().optional(),
+      overtimeEnabled: z.boolean().optional(),
+      overtimeThresholdMinutes: z.number().optional(),
+      checkoutSelfieRequired: z.boolean().optional(),
+      allowManualAttendanceEdits: z.boolean().optional()
     })
   }),
   incentiveRule: z.object({

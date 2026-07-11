@@ -140,7 +140,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
   res.json({
     accessToken,
     refreshToken,
-    user: { id: user.id, name: user.name, systemRole: user.systemRole },
+    user: { id: user.id, name: user.name, systemRole: user.systemRole, pagePermissions: user.pagePermissions || null },
     membership: membership
       ? {
           salonId: membership.salonId,
@@ -282,7 +282,8 @@ authRouter.post("/reset-password", validate(schemas.resetPassword), async (req, 
       where: { id: token.userId },
       data: {
         passwordHash,
-        passwordSetupRequired: false
+        passwordSetupRequired: false,
+        isDemoAccount: false
       }
     }),
     prisma.passwordSetupToken.update({

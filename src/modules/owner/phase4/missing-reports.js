@@ -161,9 +161,9 @@ export const registerMissingReportRoutes = (ownerRouter) => {
     const { startDate, endDate } = buildDateRange(req);
     const { stylistId } = buildReportFilters(req);
     const attendance = await prisma.attendanceRecord.findMany({
-      where: { salonId: req.salonId, date: { gte: startDate, lte: endDate }, ...(stylistId ? { userSalonId: stylistId } : {}) },
+      where: { salonId: req.salonId, attendanceDate: { gte: startDate, lte: endDate }, ...(stylistId ? { userSalonId: stylistId } : {}) },
       include: { userSalon: { include: { user: true } } },
-      orderBy: { date: "desc" },
+      orderBy: { attendanceDate: "desc" },
       take: 500
     });
     const grouped = {};
@@ -175,12 +175,10 @@ export const registerMissingReportRoutes = (ownerRouter) => {
           designation: a.userSalon?.designation || "-",
           phone: a.userSalon?.user?.phone || "-",
           totalWorkingHours: 0,
-          totalBreakTime: 0,
           days: 0
         };
       }
       grouped[key].totalWorkingHours += toAmount(a.workedMinutes || 0) / 60;
-      grouped[key].totalBreakTime += toAmount(a.breakMinutes || 0) / 60;
       grouped[key].days += 1;
     });
     const rows = Object.values(grouped).map((s, idx) => ({
@@ -188,8 +186,7 @@ export const registerMissingReportRoutes = (ownerRouter) => {
       "Staff": s.staff,
       "Designation": s.designation,
       "Staff Number": s.phone,
-      "Total Working Hours": s.totalWorkingHours.toFixed(1),
-      "Total Break Time": s.totalBreakTime.toFixed(1)
+      "Total Working Hours": s.totalWorkingHours.toFixed(1)
     }));
     res.json(rows);
   });

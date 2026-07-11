@@ -4,6 +4,7 @@ import { validate, schemas } from "../../middlewares/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { registerPublicPhase3Routes } from "./phase3.js";
 import { resolvePublicSalonBySlug } from "../../lib/phase3.js";
+import { signLoginAccessToken } from "../../lib/tokens.js";
 
 export const publicRouter = Router();
 
@@ -286,6 +287,9 @@ publicRouter.post("/demo-leads", validate(schemas.demoLead), asyncHandler(async 
 publicRouter.get("/demo-checkout-info/:leadId/:planId", asyncHandler(async (req, res) => {
   const lead = await prisma.demoLead.findUnique({ where: { id: req.params.leadId } });
   if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+  if (lead.status === "CONVERTED" && lead.salonId) {
+    return res.status(409).json({ message: "ALREADY_CONVERTED", email: lead.email });
+  }
   const plan = await prisma.plan.findUnique({ where: { id: req.params.planId } });
   if (!plan) return res.status(404).json({ message: "Plan not found" });
   res.json({
@@ -322,6 +326,9 @@ publicRouter.post("/demo-checkout/:leadId/razorpay-order", asyncHandler(async (r
   const { planId } = req.body;
   const lead = await prisma.demoLead.findUnique({ where: { id: req.params.leadId } });
   if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+  if (lead.status === "CONVERTED" && lead.salonId) {
+    return res.status(409).json({ message: "ALREADY_CONVERTED" });
+  }
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
   if (!plan) return res.status(404).json({ message: "Plan not found" });
 
@@ -372,6 +379,17 @@ publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res
   if (!keySecret) {
     return res.status(503).json({ message: "Payment gateway is not configured." });
   }
+
+  const lead = await prisma.demoLead.findUnique({ where: { id: leadId } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+
+  if (lead.status === "CONVERTED" && lead.salonId && lead.approvedUserId) {
+    const user = await prisma.user.findUnique({ where: { id: lead.approvedUserId } });
+    if (user) {
+      const loginAccessToken = signLoginAccessToken({ userId: user.id, email: user.email, salonId: lead.salonId });
+      return res.json({ ok: true, setupToken: null, loginAccessToken, email: user.email, alreadyConverted: true });
+    }
+  }
   
   const { default: crypto } = await import("node:crypto");
   const generated_signature = crypto
@@ -380,8 +398,7 @@ publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res
     .digest("hex");
 
   if (generated_signature === razorpaySignature) {
-    // 1. Mark payment completed on the lead
-    const lead = await prisma.demoLead.update({
+    const updatedLead = await prisma.demoLead.update({
       where: { id: leadId },
       data: {
         paymentCompleted: true,
@@ -390,17 +407,20 @@ publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res
       }
     });
 
-    // 2. Automate lead approval and workspace provisioning
     const { approveDemoLead } = await import("../../lib/demoInvites.js");
     const result = await approveDemoLead({
       leadId,
       actorName: "System Auto-Approval (Paid Checkout)",
       planId,
       trialDays: 30,
-      salonName: lead.company || lead.name,
+      salonName: updatedLead.company || updatedLead.name,
       businessType: "Salon",
       reviewNote: "Automated paid checkout setup via Razorpay"
     });
+
+    if (result.error) {
+      return res.status(result.error.status || 400).json({ message: result.error.message });
+    }
 
     res.json({
       ok: true,
@@ -420,3 +440,70 @@ publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res
 //   3. /public/run-seed-services - WIPE all services & categories and re-seed
 // These endpoints were removed for security reasons.
 // If you need to seed services, use the seeder script in prisma/seed/seed.js instead.
+
+// E-Commerce Razorpay Order Creation
+publicRouter.post("/salon/:slug/razorpay-order", asyncHandler(async (req, res) => {
+  let salon = await prisma.salon.findUnique({ where: { slug: req.params.slug }, select: { id: true, name: true } });
+  if (!salon) {
+    const custom = await prisma.catalogSetting.findFirst({ where: { customSlug: req.params.slug }, select: { salonId: true } });
+    if (custom) salon = await prisma.salon.findUnique({ where: { id: custom.salonId }, select: { id: true, name: true } });
+  }
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_SECRET_KEY;
+  if (!keyId || !keySecret) {
+    return res.status(503).json({ message: "Payment gateway is not configured. Please pay at salon counter." });
+  }
+
+  const { amount, currency = "INR", receipt } = req.body;
+  if (!amount || Number(amount) <= 0) {
+    return res.status(400).json({ message: "Invalid payment amount" });
+  }
+
+  const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
+  const response = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": authHeader },
+    body: JSON.stringify({
+      amount: Math.round(Number(amount) * 100),
+      currency,
+      receipt: receipt || `order_${salon.id.substring(0, 8)}_${Date.now().toString().substring(8)}`
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error("Razorpay Order Error:", errorData);
+    return res.status(400).json({ message: errorData.error?.description || "Razorpay order creation failed" });
+  }
+
+  const order = await response.json();
+  res.json({ orderId: order.id, amount: order.amount, currency: order.currency, keyId });
+}));
+
+// E-Commerce Razorpay Payment Verification
+publicRouter.post("/salon/:slug/verify-razorpay-payment", asyncHandler(async (req, res) => {
+  let salon = await prisma.salon.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+  if (!salon) {
+    const custom = await prisma.catalogSetting.findFirst({ where: { customSlug: req.params.slug }, select: { salonId: true } });
+    if (custom) salon = await prisma.salon.findUnique({ where: { id: custom.salonId }, select: { id: true } });
+  }
+  if (!salon) return res.status(404).json({ message: "Salon not found" });
+
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+  const keySecret = process.env.RAZORPAY_SECRET_KEY;
+  if (!keySecret) return res.status(503).json({ message: "Payment gateway is not configured." });
+
+  const { default: crypto } = await import("node:crypto");
+  const generatedSignature = crypto
+    .createHmac("sha256", keySecret)
+    .update(razorpayOrderId + "|" + razorpayPaymentId)
+    .digest("hex");
+
+  if (generatedSignature !== razorpaySignature) {
+    return res.status(400).json({ message: "Payment verification failed. Invalid signature." });
+  }
+
+  res.json({ ok: true, verified: true });
+}));

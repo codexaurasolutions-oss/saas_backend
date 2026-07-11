@@ -1064,3 +1064,207 @@ superAdminRouter.get("/global-search", asyncHandler(async (req, res) => {
   results.sort((a, b) => a.title.toLowerCase().indexOf(q.toLowerCase()) - b.title.toLowerCase().indexOf(q.toLowerCase()));
   res.json({ results: results.slice(0, 20) });
 }));
+
+// ─────────────────────────────────────────────
+// Staff Management (Super Admin Staff accounts)
+// ─────────────────────────────────────────────
+
+const AVAILABLE_PAGES = [
+  { key: "dashboard", label: "Dashboard", path: "/super-admin/dashboard" },
+  { key: "salons", label: "Salons Control", path: "/super-admin/salons" },
+  { key: "plans", label: "Plans Catalog", path: "/super-admin/plans" },
+  { key: "subscriptions", label: "Customer Management", path: "/super-admin/subscriptions" },
+  { key: "demo-leads", label: "Demo Pipeline", path: "/super-admin/demo-leads" },
+  { key: "support-tickets", label: "Support Queue", path: "/super-admin/support-tickets" },
+  { key: "traffic", label: "Traffic Analytics", path: "/super-admin/traffic" },
+  { key: "settings", label: "Global Settings", path: "/super-admin/settings" },
+  { key: "audit-logs", label: "Platform Logs", path: "/super-admin/audit-logs" },
+  { key: "staff", label: "Staff Management", path: "/super-admin/staff" }
+];
+
+superAdminRouter.get("/available-pages", asyncHandler(async (req, res) => {
+  res.json(AVAILABLE_PAGES);
+}));
+
+superAdminRouter.get("/staff", asyncHandler(async (req, res) => {
+  const q = req.query.q ? String(req.query.q).trim() : "";
+  const staff = await prisma.user.findMany({
+    where: {
+      systemRole: "SUPER_ADMIN",
+      isDemoAccount: false,
+      pagePermissions: { not: null },
+      ...(q ? {
+        OR: [
+          { name: { contains: q, mode: "insensitive" } },
+          { email: { contains: q, mode: "insensitive" } }
+        ]
+      } : {})
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isActive: true,
+      pagePermissions: true,
+      createdAt: true
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  res.json(staff);
+}));
+
+superAdminRouter.post("/staff", asyncHandler(async (req, res) => {
+  const { name, email, password, pagePermissions } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: "Name, email, and password are required." });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 characters." });
+  }
+  if (!Array.isArray(pagePermissions) || pagePermissions.length === 0) {
+    return res.status(400).json({ message: "At least one page permission is required." });
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+  if (existing) {
+    return res.status(409).json({ message: "A user with this email already exists." });
+  }
+
+  const validKeys = AVAILABLE_PAGES.map(p => p.key);
+  const invalidPerms = pagePermissions.filter(p => !validKeys.includes(p));
+  if (invalidPerms.length > 0) {
+    return res.status(400).json({ message: `Invalid page permissions: ${invalidPerms.join(", ")}` });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const staff = await prisma.user.create({
+    data: {
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      passwordHash,
+      systemRole: "SUPER_ADMIN",
+      pagePermissions: pagePermissions,
+      isActive: true
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isActive: true,
+      pagePermissions: true,
+      createdAt: true
+    }
+  });
+
+  await createAuditLog({
+    actorUserId: req.user.userId,
+    module: "STAFF",
+    action: "STAFF_CREATED",
+    entityType: "USER",
+    entityId: staff.id,
+    reference: staff.email,
+    summary: `Staff account created: ${staff.name} (${staff.email})`,
+    metadata: { pagePermissions }
+  });
+
+  res.status(201).json(staff);
+}));
+
+superAdminRouter.get("/staff/:id", asyncHandler(async (req, res) => {
+  const staff = await prisma.user.findFirst({
+    where: { id: req.params.id, systemRole: "SUPER_ADMIN", pagePermissions: { not: null } },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isActive: true,
+      pagePermissions: true,
+      createdAt: true
+    }
+  });
+  if (!staff) return res.status(404).json({ message: "Staff member not found." });
+  res.json(staff);
+}));
+
+superAdminRouter.patch("/staff/:id", asyncHandler(async (req, res) => {
+  const { name, email, password, pagePermissions, isActive } = req.body;
+
+  const existing = await prisma.user.findFirst({
+    where: { id: req.params.id, systemRole: "SUPER_ADMIN", pagePermissions: { not: null } }
+  });
+  if (!existing) return res.status(404).json({ message: "Staff member not found." });
+
+  if (email && email.toLowerCase().trim() !== existing.email) {
+    const dup = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (dup) return res.status(409).json({ message: "A user with this email already exists." });
+  }
+
+  if (pagePermissions !== undefined) {
+    if (!Array.isArray(pagePermissions) || pagePermissions.length === 0) {
+      return res.status(400).json({ message: "At least one page permission is required." });
+    }
+    const validKeys = AVAILABLE_PAGES.map(p => p.key);
+    const invalidPerms = pagePermissions.filter(p => !validKeys.includes(p));
+    if (invalidPerms.length > 0) {
+      return res.status(400).json({ message: `Invalid page permissions: ${invalidPerms.join(", ")}` });
+    }
+  }
+
+  const updateData = {};
+  if (name) updateData.name = name.trim();
+  if (email) updateData.email = email.toLowerCase().trim();
+  if (password) {
+    if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters." });
+    updateData.passwordHash = await bcrypt.hash(password, 10);
+  }
+  if (pagePermissions !== undefined) updateData.pagePermissions = pagePermissions;
+  if (isActive !== undefined) updateData.isActive = isActive;
+
+  const updated = await prisma.user.update({
+    where: { id: req.params.id },
+    data: updateData,
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isActive: true,
+      pagePermissions: true,
+      createdAt: true
+    }
+  });
+
+  await createAuditLog({
+    actorUserId: req.user.userId,
+    module: "STAFF",
+    action: "STAFF_UPDATED",
+    entityType: "USER",
+    entityId: updated.id,
+    reference: updated.email,
+    summary: `Staff account updated: ${updated.name} (${updated.email})`,
+    metadata: { updatedFields: Object.keys(updateData) }
+  });
+
+  res.json(updated);
+}));
+
+superAdminRouter.delete("/staff/:id", asyncHandler(async (req, res) => {
+  const existing = await prisma.user.findFirst({
+    where: { id: req.params.id, systemRole: "SUPER_ADMIN", pagePermissions: { not: null } }
+  });
+  if (!existing) return res.status(404).json({ message: "Staff member not found." });
+
+  await prisma.user.delete({ where: { id: req.params.id } });
+
+  await createAuditLog({
+    actorUserId: req.user.userId,
+    module: "STAFF",
+    action: "STAFF_DELETED",
+    entityType: "USER",
+    entityId: existing.id,
+    reference: existing.email,
+    summary: `Staff account deleted: ${existing.name} (${existing.email})`
+  });
+
+  res.json({ message: "Staff member deleted successfully." });
+}));

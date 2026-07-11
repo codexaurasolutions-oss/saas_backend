@@ -4,10 +4,19 @@ import { requireSalonPermission } from "../../../middlewares/rbac.js";
 
 export const registerMyPageRoutes = (ownerRouter) => {
   ownerRouter.get("/my-dashboard", requireSalonPermission("myDashboard", "view"), async (req, res) => {
-    const [profile, scopedAppointments, notifications] = await Promise.all([
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [profile, scopedAppointments, notifications, todayAttendance, salonSettings] = await Promise.all([
       prisma.userSalon.findFirst({
         where: { id: req.user.membershipId, salonId: req.salonId },
-        include: { serviceAssignments: { include: { service: true } } }
+        include: {
+          serviceAssignments: { include: { service: true } },
+          branch: true,
+          user: true
+        }
       }),
       prisma.appointment.findMany({
         where: {
@@ -28,13 +37,30 @@ export const registerMyPageRoutes = (ownerRouter) => {
         include: { appointment: { include: { customer: true, branch: true } } },
         orderBy: { createdAt: "desc" },
         take: 8
+      }),
+      prisma.attendanceRecord.findFirst({
+        where: {
+          salonId: req.salonId,
+          userSalonId: req.user.membershipId,
+          attendanceDate: { gte: today, lt: tomorrow }
+        },
+        orderBy: { checkInAt: "desc" }
+      }),
+      prisma.salonSetting.findFirst({
+        where: { salonId: req.salonId }
       })
     ]);
+
+    const attendanceSettings = salonSettings?.advancedSettings?.attendanceSettings || null;
+
     res.json({
       todayAppointments: scopedAppointments.filter((item) => new Date(item.startAt).toDateString() === new Date().toDateString()),
       recentAppointments: scopedAppointments.slice(0, 5),
       assignedServices: profile?.serviceAssignments || [],
-      notifications
+      notifications,
+      todayAttendance: todayAttendance || null,
+      profile: profile || null,
+      attendanceSettings
     });
   });
 

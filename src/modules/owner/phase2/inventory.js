@@ -73,7 +73,8 @@ export const registerInventoryRoutes = (ownerRouter) => {
   });
 
   ownerRouter.post("/inventory/products", requireFeatureEnabled("inventory"), requireSalonPermission("inventory", "create"), validate(schemas.product), async (req, res) => {
-    res.status(201).json(await prisma.product.create({
+    const initialStock = Number(req.body.currentStock) || 0;
+    const product = await prisma.product.create({
       data: {
         salonId: req.salonId,
         branchId: req.body.branchId || null,
@@ -87,6 +88,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
         costPrice: req.body.costPrice,
         sellingPrice: req.body.sellingPrice,
         salePrice: req.body.salePrice ?? null,
+        currentStock: initialStock,
         minStock: req.body.minStock || 0,
         expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
         allowNegativeStock: Boolean(req.body.allowNegativeStock),
@@ -105,12 +107,27 @@ export const registerInventoryRoutes = (ownerRouter) => {
         width: req.body.width ?? null,
         height: req.body.height ?? null
       }
-    }));
+    });
+    if (initialStock > 0) {
+      await prisma.stockMovement.create({
+        data: {
+          salonId: req.salonId,
+          productId: product.id,
+          branchId: req.body.branchId || null,
+          type: "STOCK_IN",
+          quantity: initialStock,
+          note: "Initial stock on product creation",
+          createdBy: req.user?.id || null
+        }
+      });
+    }
+    res.status(201).json(product);
   });
 
   ownerRouter.patch("/inventory/products/:id", requireFeatureEnabled("inventory"), requireSalonPermission("inventory", "edit"), validate(schemas.product), async (req, res) => {
     const product = await prisma.product.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
     if (!product) return res.status(404).json({ message: "Product not found" });
+    const newStock = req.body.currentStock !== undefined ? Number(req.body.currentStock) : undefined;
     res.json(await prisma.product.update({
       where: { id: product.id },
       data: {
@@ -125,6 +142,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
         costPrice: req.body.costPrice,
         sellingPrice: req.body.sellingPrice,
         salePrice: req.body.salePrice ?? null,
+        currentStock: newStock !== undefined ? newStock : product.currentStock,
         minStock: req.body.minStock ?? product.minStock,
         expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
         allowNegativeStock: Boolean(req.body.allowNegativeStock),

@@ -392,9 +392,14 @@ export const createOnlineOrder = async ({ salonId, body, actorName = "PUBLIC_STO
     const orderNumber = `ORD-${String(count + 1).padStart(5, "0")}`;
     const subtotal = body.items.reduce((sum, item) => {
       const product = productMap.get(item.productId);
-      return sum + toAmount(product.sellingPrice) * Number(item.qty);
+      const unitPrice = product.salePrice && Number(product.salePrice) > 0 && Number(product.salePrice) < Number(product.sellingPrice)
+        ? Number(product.salePrice) : toAmount(product.sellingPrice);
+      return sum + unitPrice * Number(item.qty);
     }, 0);
-    const total = subtotal;
+    const taxPercent = Number(body.taxPercent) || 0;
+    const deliveryFee = Number(body.deliveryFee) || 0;
+    const taxAmount = Math.round(subtotal * taxPercent / 100 * 100) / 100;
+    const total = Math.round((subtotal + taxAmount + deliveryFee) * 100) / 100;
 
     const order = await tx.onlineOrder.create({
       data: {
@@ -406,10 +411,12 @@ export const createOnlineOrder = async ({ salonId, body, actorName = "PUBLIC_STO
         customerPhone: customer.phone,
         customerEmail: customer.email || null,
         note: body.note || null,
-        paymentStatus: body.paymentMode === "ONLINE_PLACEHOLDER" ? "PENDING" : "PENDING",
+        paymentStatus: body.paymentMode === "ONLINE" ? "PENDING" : "PENDING",
         fulfillmentMethod: body.fulfillmentMethod || "PICKUP",
         source,
         subtotal,
+        discount: 0,
+        tax: taxAmount,
         total,
         couponCode: body.couponCode || null,
         giftCardCode: body.giftCardCode || null,
@@ -417,12 +424,14 @@ export const createOnlineOrder = async ({ salonId, body, actorName = "PUBLIC_STO
         items: {
           create: body.items.map((item) => {
             const product = productMap.get(item.productId);
+            const unitPrice = product.salePrice && Number(product.salePrice) > 0 && Number(product.salePrice) < Number(product.sellingPrice)
+              ? Number(product.salePrice) : toAmount(product.sellingPrice);
             return {
               productId: product.id,
               productName: product.name,
               qty: Number(item.qty),
-              unitPrice: toAmount(product.sellingPrice),
-              lineTotal: toAmount(product.sellingPrice) * Number(item.qty)
+              unitPrice,
+              lineTotal: unitPrice * Number(item.qty)
             };
           })
         },
