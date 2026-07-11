@@ -423,7 +423,9 @@ export const schemas = {
       bankName: optionalString,
       bankBranch: optionalString,
       accountNumber: optionalString,
-      ifscCode: optionalString
+      ifscCode: optionalString,
+      attendanceEnabled: z.boolean().optional(),
+      attendanceEnrollmentPhotoUrl: z.string().nullable().optional()
     })
   }),
   invoice: z.object({

@@ -1320,7 +1320,9 @@ ownerRouter.patch("/users/:id", requireSalonPermission("staff", "edit"), validat
         bankName: req.body.bankName !== undefined ? (req.body.bankName || null) : row.bankName,
         bankBranch: req.body.bankBranch !== undefined ? (req.body.bankBranch || null) : row.bankBranch,
         accountNumber: req.body.accountNumber !== undefined ? (req.body.accountNumber || null) : row.accountNumber,
-        ifscCode: req.body.ifscCode !== undefined ? (req.body.ifscCode || null) : row.ifscCode
+        ifscCode: req.body.ifscCode !== undefined ? (req.body.ifscCode || null) : row.ifscCode,
+        attendanceEnabled: req.body.attendanceEnabled !== undefined ? req.body.attendanceEnabled : row.attendanceEnabled,
+        attendanceEnrollmentPhotoUrl: req.body.attendanceEnrollmentPhotoUrl !== undefined ? (req.body.attendanceEnrollmentPhotoUrl || null) : row.attendanceEnrollmentPhotoUrl
       },
       include: { user: true, branch: true, customRole: true }
     });

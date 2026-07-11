@@ -307,6 +307,68 @@ publicRouter.get("/demo-checkout-info/:leadId/:planId", asyncHandler(async (req,
   });
 }));
 
+publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res) => {
+  const { leadId, planId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+  
+  const keySecret = process.env.RAZORPAY_SECRET_KEY;
+  
+  if (!keySecret) {
+    return res.status(503).json({ message: "Payment gateway is not configured." });
+  }
+
+  const lead = await prisma.demoLead.findUnique({ where: { id: leadId } });
+  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
+
+  if (lead.status === "CONVERTED" && lead.salonId && lead.approvedUserId) {
+    const user = await prisma.user.findUnique({ where: { id: lead.approvedUserId } });
+    if (user) {
+      const loginAccessToken = signLoginAccessToken({ userId: user.id, email: user.email, salonId: lead.salonId });
+      return res.json({ ok: true, setupToken: null, loginAccessToken, email: user.email, alreadyConverted: true });
+    }
+  }
+  
+  const { default: crypto } = await import("node:crypto");
+  const generated_signature = crypto
+    .createHmac("sha256", keySecret)
+    .update(razorpayOrderId + "|" + razorpayPaymentId)
+    .digest("hex");
+
+  if (generated_signature === razorpaySignature) {
+    const updatedLead = await prisma.demoLead.update({
+      where: { id: leadId },
+      data: {
+        paymentCompleted: true,
+        paymentSessionId: razorpayPaymentId,
+        selectedPlanId: planId
+      }
+    });
+
+    const { approveDemoLead } = await import("../../lib/demoInvites.js");
+    const result = await approveDemoLead({
+      leadId,
+      actorName: "System Auto-Approval (Paid Checkout)",
+      planId,
+      trialDays: 30,
+      salonName: updatedLead.company || updatedLead.name,
+      businessType: "Salon",
+      reviewNote: "Automated paid checkout setup via Razorpay"
+    });
+
+    if (result.error) {
+      return res.status(result.error.status || 400).json({ message: result.error.message });
+    }
+
+    res.json({
+      ok: true,
+      setupToken: result.rawToken,
+      loginAccessToken: result.loginAccessToken,
+      email: lead.email
+    });
+  } else {
+    res.status(400).json({ message: "Payment verification failed. Invalid signature." });
+  }
+}));
+
 publicRouter.post("/demo-checkout/:leadId", asyncHandler(async (req, res) => {
   const lead = await prisma.demoLead.findUnique({ where: { id: req.params.leadId } });
   if (!lead) return res.status(404).json({ message: "Demo lead not found" });
@@ -369,68 +431,6 @@ publicRouter.post("/demo-checkout/:leadId/razorpay-order", asyncHandler(async (r
     leadEmail: lead.email,
     leadPhone: lead.phone
   });
-}));
-
-publicRouter.post("/demo-checkout/verify-razorpay", asyncHandler(async (req, res) => {
-  const { leadId, planId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-  
-  const keySecret = process.env.RAZORPAY_SECRET_KEY;
-  
-  if (!keySecret) {
-    return res.status(503).json({ message: "Payment gateway is not configured." });
-  }
-
-  const lead = await prisma.demoLead.findUnique({ where: { id: leadId } });
-  if (!lead) return res.status(404).json({ message: "Demo lead not found" });
-
-  if (lead.status === "CONVERTED" && lead.salonId && lead.approvedUserId) {
-    const user = await prisma.user.findUnique({ where: { id: lead.approvedUserId } });
-    if (user) {
-      const loginAccessToken = signLoginAccessToken({ userId: user.id, email: user.email, salonId: lead.salonId });
-      return res.json({ ok: true, setupToken: null, loginAccessToken, email: user.email, alreadyConverted: true });
-    }
-  }
-  
-  const { default: crypto } = await import("node:crypto");
-  const generated_signature = crypto
-    .createHmac("sha256", keySecret)
-    .update(razorpayOrderId + "|" + razorpayPaymentId)
-    .digest("hex");
-
-  if (generated_signature === razorpaySignature) {
-    const updatedLead = await prisma.demoLead.update({
-      where: { id: leadId },
-      data: {
-        paymentCompleted: true,
-        paymentSessionId: razorpayPaymentId,
-        selectedPlanId: planId
-      }
-    });
-
-    const { approveDemoLead } = await import("../../lib/demoInvites.js");
-    const result = await approveDemoLead({
-      leadId,
-      actorName: "System Auto-Approval (Paid Checkout)",
-      planId,
-      trialDays: 30,
-      salonName: updatedLead.company || updatedLead.name,
-      businessType: "Salon",
-      reviewNote: "Automated paid checkout setup via Razorpay"
-    });
-
-    if (result.error) {
-      return res.status(result.error.status || 400).json({ message: result.error.message });
-    }
-
-    res.json({
-      ok: true,
-      setupToken: result.rawToken,
-      loginAccessToken: result.loginAccessToken,
-      email: lead.email
-    });
-  } else {
-    res.status(400).json({ message: "Payment verification failed. Invalid signature." });
-  }
 }));
 
 // SECURITY: The following 3 debug endpoints have been REMOVED from production.
