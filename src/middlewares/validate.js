@@ -473,7 +473,7 @@ export const schemas = {
   }),
   paymentLinkLog: z.object({
     body: z.object({
-      status: z.enum(["SENT", "FAILED", "PAID_PLACEHOLDER"]),
+      status: z.enum(["SENT", "FAILED", "PAID"]),
       note: z.string().optional(),
       gatewayRef: z.string().optional()
     })
@@ -508,7 +508,7 @@ export const schemas = {
       branchId: idSchema,
       primaryStaffUserId: z.string().optional(),
       title: optionalString,
-      bookingChannel: z.enum(["WALK_IN", "PHONE", "ONLINE_PLACEHOLDER", "MANUAL"]).default("MANUAL"),
+      bookingChannel: z.enum(["WALK_IN", "PHONE", "ONLINE", "MANUAL"]).default("MANUAL"),
       status: z.enum(["PENDING", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"]).optional(),
       startAt: requiredDateString,
       endAt: requiredDateString,
@@ -913,7 +913,7 @@ export const schemas = {
       customerPhone: indianPhoneSchema,
       customerEmail: optionalEmailLike,
       note: optionalString,
-      paymentMode: z.enum(["COD", "PAY_AT_SALON", "ONLINE", "ONLINE_PLACEHOLDER"]).default("PAY_AT_SALON"),
+      paymentMode: z.enum(["COD", "PAY_AT_SALON", "ONLINE"]).default("PAY_AT_SALON"),
       fulfillmentMethod: z.enum(["PICKUP", "DELIVERY"]).default("PICKUP"),
       taxPercent: z.number().min(0).max(100).optional(),
       deliveryFee: z.number().min(0).optional(),
@@ -1329,7 +1329,7 @@ export const schemas = {
   }),
   whatsappLogStatus: z.object({
     body: z.object({
-      status: z.enum(["SENT", "DELIVERED", "READ", "FAILED", "OPEN_PLACEHOLDER"])
+      status: z.enum(["SENT", "DELIVERED", "READ", "FAILED", "OPEN"])
     })
   }),
   whatsappReplyPlaceholder: z.object({

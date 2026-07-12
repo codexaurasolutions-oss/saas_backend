@@ -228,7 +228,7 @@ enum WhatsAppLogStatus {
   DELIVERED
   READ
   FAILED
-  OPEN_PLACEHOLDER
+  OPEN
 }
 
 model User {

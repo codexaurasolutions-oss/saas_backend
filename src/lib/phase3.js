@@ -283,7 +283,7 @@ export const createPublicAppointment = async ({ slug, body }) => {
         customerId: customer.id,
         primaryStaffUserId: body.primaryStaffUserId || [...assignedStaffIds][0] || null,
         title: body.title || "Online Booking",
-        bookingChannel: "ONLINE_PLACEHOLDER",
+        bookingChannel: "ONLINE",
         status: "PENDING",
         startAt: new Date(body.startAt),
         endAt: new Date(body.endAt),

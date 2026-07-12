@@ -1061,7 +1061,7 @@ export const logPaymentLinkPlaceholder = async ({ salonId, invoiceId, status, no
       throw error;
     }
 
-    const normalizedStatus = status === "PAID_PLACEHOLDER" ? "PAID" : status;
+    const normalizedStatus = status === "PAID" ? "PAID" : status;
     await tx.invoice.update({
       where: { id: invoice.id },
       data: {
@@ -1077,7 +1077,7 @@ export const logPaymentLinkPlaceholder = async ({ salonId, invoiceId, status, no
         amount: 0,
         mode: "ONLINE",
         note: note || `Payment link ${status.toLowerCase()} placeholder`,
-        type: status === "FAILED" ? "PAYMENT_LINK_FAILED" : status === "SENT" ? "PAYMENT_LINK_SENT" : "PAYMENT_LINK_PAID_PLACEHOLDER",
+        type: status === "FAILED" ? "PAYMENT_LINK_FAILED" : status === "SENT" ? "PAYMENT_LINK_SENT" : "PAYMENT_LINK_PAID",
         onlineStatus: normalizedStatus,
         gatewayRef: gatewayRef || null
       }

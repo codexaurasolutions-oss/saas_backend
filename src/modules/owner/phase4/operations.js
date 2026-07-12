@@ -851,6 +851,23 @@ export const registerOperationsRoutes = (ownerRouter) => {
         return res.status(400).json({ message: "Attendance biometric is not configured by the salon owner yet." });
       }
       if (!req.body.selfieUrl) return res.status(400).json({ message: "Camera permission is required." });
+
+      // Server-side face verification
+      if (req.body.selfieUrl && membership.attendanceEnrollmentPhotoUrl) {
+        try {
+          const { verifySelfie } = await import("../../../lib/faceVerification.js");
+          const faceResult = await verifySelfie({
+            selfieUrl: req.body.selfieUrl,
+            enrollmentPhotoUrl: membership.attendanceEnrollmentPhotoUrl
+          });
+          if (!faceResult.valid) {
+            return res.status(400).json({ message: faceResult.error || "Face verification failed." });
+          }
+        } catch (faceErr) {
+          console.error("[attendance] Face verification error:", faceErr.message);
+          // Don't block check-in if face verification service is unavailable
+        }
+      }
       if (!membership.branchId || !membership.branch) {
         const fallbackBranch = await prisma.branch.findFirst({
           where: { salonId: req.salonId, isActive: true },
@@ -967,6 +984,22 @@ export const registerOperationsRoutes = (ownerRouter) => {
         }
       }
       if (settings.checkoutSelfieRequired && !req.body.selfieUrl) return res.status(400).json({ message: "Camera selfie is required." });
+
+      // Server-side face verification for checkout selfie
+      if (req.body.selfieUrl && membership.attendanceEnrollmentPhotoUrl && settings.checkoutSelfieRequired) {
+        try {
+          const { verifySelfie } = await import("../../../lib/faceVerification.js");
+          const faceResult = await verifySelfie({
+            selfieUrl: req.body.selfieUrl,
+            enrollmentPhotoUrl: membership.attendanceEnrollmentPhotoUrl
+          });
+          if (!faceResult.valid) {
+            return res.status(400).json({ message: faceResult.error || "Face verification failed." });
+          }
+        } catch (faceErr) {
+          console.error("[attendance] Checkout face verification error:", faceErr.message);
+        }
+      }
       const today = startOfAttendanceDay(new Date());
       const tomorrow = endOfAttendanceDay(new Date());
       const row = await prisma.attendanceRecord.findFirst({
@@ -1336,6 +1369,51 @@ export const registerOperationsRoutes = (ownerRouter) => {
       },
       orderBy: { createdAt: "desc" }
     }));
+  });
+  ownerRouter.get("/notifications/unread-count", requireFeatureEnabled("notifications"), requireSalonPermission("notifications", "view"), async (req, res) => {
+    const count = await prisma.notification.count({
+      where: {
+        salonId: req.salonId,
+        isRead: false,
+        OR: [{ userSalonId: null }, { userSalonId: req.user.membershipId || "" }]
+      }
+    });
+    res.json({ count });
+  });
+  ownerRouter.get("/notifications/stream", requireFeatureEnabled("notifications"), requireSalonPermission("notifications", "view"), async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const salonId = req.salonId;
+    const membershipId = req.user.membershipId || null;
+
+    const sendEvent = (data) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    sendEvent({ type: "connected", timestamp: new Date().toISOString() });
+
+    const intervalId = setInterval(async () => {
+      try {
+        const count = await prisma.notification.count({
+          where: {
+            salonId,
+            isRead: false,
+            OR: [{ userSalonId: null }, { userSalonId: membershipId || "" }]
+          }
+        });
+        sendEvent({ type: "unread_count", count });
+      } catch {
+        sendEvent({ type: "error", message: "Failed to fetch unread count" });
+      }
+    }, 15000);
+
+    req.on("close", () => {
+      clearInterval(intervalId);
+    });
   });
   ownerRouter.get("/notifications/export.csv", requireFeatureEnabled("notifications"), requireSalonPermission("notifications", "view"), async (req, res) => {
     const q = String(req.query.q || "").trim();

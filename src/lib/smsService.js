@@ -3,20 +3,128 @@ import { prisma } from "./prisma.js";
 /**
  * SMS Provider interface.
  * Each provider implements send({ to, message, senderId }).
- * To add a real provider, set SMS_PROVIDER env var to its name and
- * implement the matching module below.
+ * Providers: twilio, msg91, gupshup, stub (fallback)
+ *
+ * Required env vars per provider:
+ *   Twilio:  TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER
+ *   Msg91:   MSG91_AUTH_KEY, MSG91_TEMPLATE_ID (optional)
+ *   Gupshup: GUPSHUP_API_KEY, GUPSHUP_SENDER_ID
  */
 
-const PLACEHOLDER_RESULT = async ({ to, message }) => {
+const SMS_TIMEOUT_MS = Number(process.env.SMS_TIMEOUT_MS || 10000);
+
+/* ── Twilio ────────────────────────────────────────────────────────── */
+const twilioSend = async ({ to, message, senderId }) => {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = senderId || process.env.TWILIO_FROM_NUMBER;
+
+  if (!accountSid || !authToken || !fromNumber) {
+    throw new Error("Twilio credentials missing: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER");
+  }
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const body = new URLSearchParams({ To: to, From: fromNumber, Body: message });
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SMS_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      signal: controller.signal
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || `Twilio HTTP ${res.status}`);
+    return { success: true, provider: "twilio", messageId: data.sid };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/* ── Msg91 ─────────────────────────────────────────────────────────── */
+const msg91Send = async ({ to, message, senderId }) => {
+  const authKey = process.env.MSG91_AUTH_KEY;
+  const templateId = process.env.MSG91_TEMPLATE_ID;
+
+  if (!authKey) throw new Error("Msg91 credentials missing: set MSG91_AUTH_KEY");
+
+  const phone = String(to).replace(/[^\d]/g, "");
+  const payload = {
+    flow_id: templateId || undefined,
+    sender_id: senderId || process.env.MSG91_SENDER_ID || "MSG91",
+    mobiles: phone,
+    message
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SMS_TIMEOUT_MS);
+
+  try {
+    const res = await fetch("https://api.msg91.com/v5/flow", {
+      method: "POST",
+      headers: { authkey: authKey, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || `Msg91 HTTP ${res.status}`);
+    return { success: true, provider: "msg91", messageId: data.request_id || `msg91_${Date.now()}` };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/* ── Gupshup ───────────────────────────────────────────────────────── */
+const gupshupSend = async ({ to, message, senderId }) => {
+  const apiKey = process.env.GUPSHUP_API_KEY;
+  const sender = senderId || process.env.GUPSHUP_SENDER_ID;
+
+  if (!apiKey || !sender) throw new Error("Gupshup credentials missing: set GUPSHUP_API_KEY, GUPSHUP_SENDER_ID");
+
+  const phone = String(to).replace(/[^\d]/g, "");
+  const params = new URLSearchParams({
+    method: "sms",
+    msg: message,
+    msg_type: "text",
+    userid: "",
+    apikey: apiKey,
+    senderid: sender,
+    phone,
+    format: "json"
+  });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SMS_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`https://enterprise.smsgupshup.com/API/1.0/sms/v2/send?${params}`, {
+      method: "GET",
+      signal: controller.signal
+    });
+    const data = await res.json();
+    if (data.status !== "success") throw new Error(data.message || "Gupshup send failed");
+    return { success: true, provider: "gupshup", messageId: data.messages?.[0]?.id || `gupshup_${Date.now()}` };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/* ── Stub (fallback) ───────────────────────────────────────────────── */
+const stubSend = async ({ to, message }) => {
   console.log(`[SMS STUB] would send to ${to}: ${message.slice(0, 80)}...`);
   return { success: true, provider: "stub", messageId: `stub_${Date.now()}` };
 };
 
+/* ── Provider registry ─────────────────────────────────────────────── */
 const providers = {
-  stub: { send: PLACEHOLDER_RESULT },
-  twilio: { send: PLACEHOLDER_RESULT },
-  msg91: { send: PLACEHOLDER_RESULT },
-  gupshup: { send: PLACEHOLDER_RESULT }
+  twilio: { send: twilioSend },
+  msg91: { send: msg91Send },
+  gupshup: { send: gupshupSend },
+  stub: { send: stubSend }
 };
 
 const getProvider = (name) => providers[String(name || "stub").toLowerCase()] || providers.stub;

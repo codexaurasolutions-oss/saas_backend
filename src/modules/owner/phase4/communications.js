@@ -2,6 +2,7 @@ import { prisma } from "../../../lib/prisma.js";
 import { buildCsv } from "../../../lib/phase2.js";
 import { buildWhatsAppLink, getCampaignAudience, renderTemplateText } from "../../../lib/phase3.js";
 import { sendMail } from "../../../lib/mailer.js";
+import { sendWhatsApp, sendWhatsAppBulk } from "../../../lib/whatsappService.js";
 import { createAuditLog } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -171,7 +172,7 @@ export const registerCommunicationRoutes = (ownerRouter) => {
     const updated = await prisma.whatsAppLog.update({
       where: { id: row.id },
       data: {
-        status: "OPEN_PLACEHOLDER",
+        status: "OPEN",
         metadata: {
           ...(row.metadata && typeof row.metadata === "object" ? row.metadata : {}),
           lastReplyNote: req.body.replyNote,
@@ -186,7 +187,7 @@ export const registerCommunicationRoutes = (ownerRouter) => {
       actorUserId: req.user.userId,
       actorMembershipId: req.user.membershipId,
       module: "WHATSAPP",
-      action: "REPLY_PLACEHOLDER_LOGGED",
+      action: "REPLY_LOGGED",
       entityType: "WhatsAppLog",
       entityId: row.id,
       summary: "WhatsApp reply placeholder logged"
@@ -227,12 +228,22 @@ export const registerCommunicationRoutes = (ownerRouter) => {
     const channel = normalizeChannel(req.body.channel);
     const recipient = channel === "EMAIL" ? String(req.body.email || "").trim() : String(req.body.phone || "").trim();
 
+    let whatsappResult = null;
     if (channel === "EMAIL") {
       await sendMail({
         to: recipient,
         subject: req.body.templateType || "Salon Update",
         html: buildEmailHtml(req.body.message),
         text: req.body.message
+      });
+    } else if (channel === "WHATSAPP") {
+      whatsappResult = await sendWhatsApp({
+        salonId: req.salonId,
+        to: recipient,
+        message: req.body.message,
+        customerId: req.body.customerId || null,
+        campaignId: req.body.campaignId || null,
+        imageUrl: req.body.mediaUrl || null
       });
     }
 
@@ -245,11 +256,12 @@ export const registerCommunicationRoutes = (ownerRouter) => {
         phone: recipient,
         templateType: req.body.templateType || null,
         message: req.body.message,
-        status: "SENT",
+        status: channel === "WHATSAPP" && whatsappResult ? (whatsappResult.success ? "SENT" : "FAILED") : "SENT",
         linkUrl: channel === "EMAIL" ? null : buildWhatsAppLink(recipient, req.body.message),
         metadata: {
           channel,
           addressType: channel === "EMAIL" ? "EMAIL" : "PHONE",
+          messageId: whatsappResult?.messageId || null,
           ...(req.body.mediaUrl || req.body.mediaKind ? {
             mediaKind: req.body.mediaKind || null,
             mediaUrl: req.body.mediaUrl || null
@@ -276,17 +288,27 @@ export const registerCommunicationRoutes = (ownerRouter) => {
       .filter((customer) => (channel === "EMAIL" ? customer.email : customer.phone))
       .slice(0, 50);
 
+    let sentCount = 0;
     if (channel === "EMAIL") {
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         eligibleAudience.map((customer) =>
           sendMail({
             to: customer.email,
             subject: req.body.templateType || "Salon Update",
-            html: buildEmailHtml(req.body.message || "Bulk email placeholder"),
-            text: req.body.message || "Bulk email placeholder"
+            html: buildEmailHtml(req.body.message || "Bulk email"),
+            text: req.body.message || "Bulk email"
           })
         )
       );
+      sentCount = results.filter((r) => r.status === "fulfilled").length;
+    } else if (channel === "WHATSAPP") {
+      const bulkResult = await sendWhatsAppBulk({
+        salonId: req.salonId,
+        recipients: eligibleAudience.map((c) => ({ phone: c.phone, customerId: c.id })),
+        message: req.body.message || "",
+        templateName: req.body.templateType || null
+      });
+      sentCount = bulkResult.sent;
     }
 
     const rows = eligibleAudience.map((customer) => ({
@@ -294,10 +316,10 @@ export const registerCommunicationRoutes = (ownerRouter) => {
       customerId: customer.id,
       actorMembershipId: req.user.membershipId || null,
       phone: channel === "EMAIL" ? customer.email : customer.phone,
-      templateType: req.body.templateType || "bulk_placeholder",
-      message: req.body.message || (channel === "EMAIL" ? "Bulk email placeholder" : "Bulk WhatsApp placeholder"),
+      templateType: req.body.templateType || "bulk",
+      message: req.body.message || "",
       status: "SENT",
-      linkUrl: channel === "EMAIL" ? null : buildWhatsAppLink(customer.phone, req.body.message || "Bulk WhatsApp placeholder"),
+      linkUrl: channel === "EMAIL" ? null : buildWhatsAppLink(customer.phone, req.body.message || ""),
       metadata: {
         channel,
         addressType: channel === "EMAIL" ? "EMAIL" : "PHONE",
@@ -305,8 +327,8 @@ export const registerCommunicationRoutes = (ownerRouter) => {
         mediaUrl: req.body.mediaUrl || null
       }
     }));
-    if (rows.length) await prisma.whatsAppLog.createMany({ data: rows });
-    res.json({ sentCount: rows.length });
+    if (rows.length && channel === "EMAIL") await prisma.whatsAppLog.createMany({ data: rows });
+    res.json({ sentCount });
   });
   ownerRouter.get("/whatsapp/automations", requireFeatureEnabled("whatsapp"), requireSalonPermission("whatsapp", "view"), async (req, res) => {
     res.json(await prisma.whatsAppAutomation.findMany({ where: { salonId: req.salonId }, orderBy: { createdAt: "desc" } }));

@@ -741,7 +741,7 @@ export const registerBillingRoutes = (ownerRouter) => {
     res.status(201).json({
       invoiceId: updated.id,
       invoiceNumber: updated.invoiceNumber,
-      channelHints: ["WHATSAPP_PLACEHOLDER", "SMS_PLACEHOLDER", "EMAIL_PLACEHOLDER"],
+      channelHints: ["WHATSAPP", "SMS", "EMAIL"],
       reminderPreview: `Reminder: pending balance ${updated.balanceAmount} on invoice ${updated.invoiceNumber}`
     });
   });
