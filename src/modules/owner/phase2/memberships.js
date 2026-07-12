@@ -374,6 +374,20 @@ export const registerMembershipRoutes = (ownerRouter) => {
     res.json(updated);
   });
 
+  ownerRouter.delete("/packages/:id", requireSalonPermission("packages", "delete"), async (req, res) => {
+    const pack = await prisma.package.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+    if (!pack) return res.status(404).json({ message: "Package not found" });
+    const assignedCount = await prisma.customerPackage.count({ where: { packageId: pack.id } });
+    if (assignedCount > 0) {
+      return res.status(400).json({ message: `Cannot delete package — ${assignedCount} customer(s) have been assigned this package. Deactivate it instead.` });
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.packageService.deleteMany({ where: { packageId: pack.id } });
+      await tx.package.delete({ where: { id: pack.id } });
+    });
+    res.json({ ok: true, message: "Package deleted" });
+  });
+
   ownerRouter.post("/packages/assign", requireSalonPermission("packages", "create"), validate(schemas.assignPackage), async (req, res) => {
     try {
       let pack;
