@@ -114,12 +114,12 @@ describe("phase3 owner routes", () => {
       })
     }));
 
-    const logResponse = await request(buildApp()).get("/owner/campaigns/campaign-1/logs?q=sent&eventType=SENT_PLACEHOLDER");
+    const logResponse = await request(buildApp()).get("/owner/campaigns/campaign-1/logs?q=sent&eventType=WHATSAPP_DISPATCHED");
     expect(logResponse.status).toBe(200);
     expect(prismaMock.campaignLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         campaignId: "campaign-1",
-        eventType: "SENT_PLACEHOLDER",
+        eventType: "WHATSAPP_DISPATCHED",
         details: { contains: "sent", mode: "insensitive" }
       })
     }));

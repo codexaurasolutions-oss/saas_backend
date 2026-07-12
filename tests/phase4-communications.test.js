@@ -105,7 +105,7 @@ describe("phase4 communication routes", () => {
     });
     prismaMock.whatsAppLog.update.mockResolvedValue({
       id: "log-1",
-      status: "OPEN_PLACEHOLDER"
+      status: "OPEN"
     });
     prismaMock.auditLog.create.mockResolvedValue({ id: "audit-2" });
 
@@ -117,7 +117,7 @@ describe("phase4 communication routes", () => {
     expect(prismaMock.whatsAppLog.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "log-1" },
       data: expect.objectContaining({
-        status: "OPEN_PLACEHOLDER",
+        status: "OPEN",
         metadata: expect.objectContaining({
           lastReplyNote: "Customer asked for tomorrow slot."
         })
