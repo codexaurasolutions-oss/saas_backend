@@ -313,6 +313,7 @@ export const schemas = {
       branchId: z.string().optional(),
       categoryId: z.string().nullable().optional(),
       description: z.any().optional(),
+      imageUrl: z.string().nullable().optional(),
       gender: z.enum(["MALE", "FEMALE", "UNISEX"]).optional(),
       taxRate: z.number().min(0).optional(),
       onlineBookingEnabled: z.boolean().optional(),
