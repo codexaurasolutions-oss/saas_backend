@@ -743,6 +743,7 @@ export const schemas = {
     body: z.object({
       name: z.string().min(2),
       description: optionalString,
+      branchId: z.string().nullable().optional(),
       benefits: z.array(z.object({
         label: z.string().min(1),
         value: optionalString
