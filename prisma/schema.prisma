@@ -318,6 +318,8 @@ model Salon {
   catalogOffers         CatalogOffer[]
   catalogAnalytics      CatalogAnalyticsEvent[]
   ecommerceSettings     EcommerceSetting[]
+  staffRequirements     StaffRequirement[]
+  productRequirements   ProductRequirement[]
   onlineOrders          OnlineOrder[]
   campaigns             Campaign[]
   messageTemplates      MessageTemplate[]
@@ -526,6 +528,8 @@ model Branch {
   designations         Designation[]
   taxRates             TaxRate[]
   whatsAppSettings     WhatsAppSetting[]
+  staffRequirements    StaffRequirement[]
+  productRequirements  ProductRequirement[]
 }
 
 model ServiceCategory {
@@ -2334,3 +2338,43 @@ model PnlCategory {
 
   @@index([salonId])
 }
+
+model StaffRequirement {
+  id          String   @id @default(cuid())
+  salonId     String?
+  branchId    String?
+  title       String
+  description String?
+  department  String?
+  position    String?
+  salary      String?
+  shift       String?
+  urgency     String   @default("MEDIUM")
+  skills      String?
+  count       Int      @default(1)
+  priority    String   @default("MEDIUM")
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  salon       Salon?   @relation(fields: [salonId], references: [id])
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+}
+
+model ProductRequirement {
+  id          String   @id @default(cuid())
+  salonId     String?
+  branchId    String?
+  productName String
+  description String?
+  category    String?
+  quantity    Int      @default(1)
+  unitPrice   Float?
+  priority    String   @default("MEDIUM")
+  status      String   @default("OPEN")
+  vendor      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  salon       Salon?   @relation(fields: [salonId], references: [id])
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+}
+
