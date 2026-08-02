@@ -682,6 +682,7 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
             membershipWalletUsed: item.membershipWalletUsed || null,
             commissionAmount: item.commissionAmount || null,
             complimentaryRemark: item.complimentaryRemark || null,
+            consumableData: Array.isArray(item.consumableItems) && item.consumableItems.length > 0 ? item.consumableItems : null,
             ...(item.serviceId ? { serviceId: item.serviceId } : {}),
             ...(item.productId ? { product: { connect: { id: item.productId } } } : {}),
             ...(item.membershipPlanId ? { membershipPlan: { connect: { id: item.membershipPlanId } } } : {}),

@@ -73,7 +73,16 @@ export const authMiddleware = async (req, res, next) => {
     const mergedPermissions = membership
       ? membership.salonRole === "SALON_OWNER"
         ? { ...defaultOwnerPermissions, ...(membership.permissions || {}) }
-        : (membership.permissions || {})
+        : (await (async () => {
+            if (membership.customRoleId) {
+              const customRole = await prisma.customRole.findFirst({ where: { id: membership.customRoleId, salonId: resolvedSalonId } });
+              if (customRole) {
+                const base = { ...(membership.permissions || {}), ...(customRole.permissions || {}) };
+                return base;
+              }
+            }
+            return membership.permissions || {};
+          })())
       : null;
 
     req.user = {

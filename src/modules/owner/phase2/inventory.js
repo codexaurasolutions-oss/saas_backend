@@ -275,7 +275,8 @@ export const registerInventoryRoutes = (ownerRouter) => {
   });
 
   ownerRouter.get("/purchases/vendors", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "view"), async (req, res) => {
-    res.json(await prisma.vendor.findMany({ where: { salonId: req.salonId, isActive: true }, orderBy: { createdAt: "desc" } }));
+    const branchId = normalizeBranchId(req.query.branchId);
+    res.json(await prisma.vendor.findMany({ where: { salonId: req.salonId, isActive: true, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) }, orderBy: { createdAt: "desc" } }));
   });
 
   ownerRouter.post("/purchases/vendors", requireFeatureEnabled("inventory"), requireSalonPermission("purchases", "create"), validate(schemas.vendor), async (req, res) => {

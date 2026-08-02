@@ -1,7 +1,10 @@
 import { prisma } from "./prisma.js";
 
 export const toAmount = (value) => Number(value || 0);
-export const normalizeBranchId = (value) => (value ? String(value) : null);
+export const normalizeBranchId = (value) => {
+  if (!value || value === "undefined" || value === "null" || value === "ALL") return null;
+  return String(value);
+};
 export const toDate = (value) => (value ? new Date(value) : null);
 
 export const timeToMinutes = (value) => {

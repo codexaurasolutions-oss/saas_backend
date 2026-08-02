@@ -154,6 +154,15 @@ reportsRouter.get("/sales-summary-dashboard", async (req, res) => {
     include: { customer: true, payments: true, items: true }
   });
 
+  const serviceDurations = invoices
+    .filter(inv => inv.startedAt && inv.completedAt)
+    .map(inv => (new Date(inv.completedAt).getTime() - new Date(inv.startedAt).getTime()) / 60000);
+
+  const totalServiceTimeEntries = serviceDurations.length;
+  const minServiceTime = totalServiceTimeEntries > 0 ? Math.round(Math.min(...serviceDurations)) : 0;
+  const maxServiceTime = totalServiceTimeEntries > 0 ? Math.round(Math.max(...serviceDurations)) : 0;
+  const avgServiceTime = totalServiceTimeEntries > 0 ? Math.round(serviceDurations.reduce((a, b) => a + b, 0) / totalServiceTimeEntries) : 0;
+
   let grossSale = 0;
   let grossCount = invoices.length;
 
@@ -418,6 +427,12 @@ reportsRouter.get("/sales-summary-dashboard", async (req, res) => {
       avgBillValue,
       avgServiceBillValue,
       avgProductBillValue
+    },
+    averageServiceTime: {
+      minMinutes: minServiceTime,
+      maxMinutes: maxServiceTime,
+      avgMinutes: avgServiceTime,
+      totalSessions: totalServiceTimeEntries
     }
   });
 });

@@ -6,12 +6,12 @@ import { schemas, validate } from "../../../middlewares/validate.js";
 
 export const registerMembershipRoutes = (ownerRouter) => {
   ownerRouter.get("/memberships/plans", requireSalonPermission("memberships", "view"), async (req, res) => {
-    const branchId = req.query.branchId ? String(req.query.branchId) : null;
+    const branchId = normalizeBranchId(req.query.branchId);
     res.json(await prisma.membershipPlan.findMany({ where: { salonId: req.salonId, isActive: true, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) }, include: { services: { include: { service: true } } } }));
   });
 
   ownerRouter.get("/memberships", requireSalonPermission("memberships", "view"), async (req, res) => {
-    const branchId = req.query.branchId ? String(req.query.branchId) : null;
+    const branchId = normalizeBranchId(req.query.branchId);
     res.json(await prisma.membershipPlan.findMany({ where: { salonId: req.salonId, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) }, include: { services: { include: { service: true } } }, orderBy: { createdAt: "desc" } }));
   });
 
@@ -136,6 +136,9 @@ export const registerMembershipRoutes = (ownerRouter) => {
       if (!plan) return res.status(404).json({ message: "Membership plan not found" });
       const startsAt = req.body.startsAt ? new Date(req.body.startsAt) : new Date();
       const endsAt = new Date(startsAt.getTime() + plan.validityDays * 24 * 60 * 60 * 1000);
+      const membershipPrice = req.body.price != null ? Number(req.body.price) : Number(plan.price);
+      const walletBalance = plan.benefitType === "WALLET_VALUE" ? plan.walletValue : membershipPrice;
+
       const created = await prisma.customerMembership.create({
         data: {
           salonId: req.salonId,
@@ -144,7 +147,7 @@ export const registerMembershipRoutes = (ownerRouter) => {
           soldInvoiceId: req.body.soldInvoiceId || null,
           startsAt,
           endsAt,
-          remainingWalletValue: plan.benefitType === "WALLET_VALUE" ? plan.walletValue : null,
+          remainingWalletValue: walletBalance,
           remarks: req.body.remarks || null
         },
         include: { membershipPlan: true }
@@ -341,7 +344,7 @@ export const registerMembershipRoutes = (ownerRouter) => {
 
   ownerRouter.get("/packages", requireSalonPermission("packages", "view"), async (req, res) => {
     const branchId = normalizeBranchId(req.query.branchId);
-    const where = { salonId: req.salonId, ...(branchId ? { branchId } : {}) };
+    const where = { salonId: req.salonId, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) };
     res.json(await prisma.package.findMany({ where, include: { services: { include: { service: true } } }, orderBy: { createdAt: "desc" } }));
   });
 

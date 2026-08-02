@@ -525,6 +525,7 @@ export const registerBillingRoutes = (ownerRouter) => {
           taxPct,
           lineTotal: inclusiveTax && taxPct > 0 ? lineBase : lineBase + lineTax,
           complimentaryRemark: rawItem?.complimentaryRemark || null,
+          consumableData: rawItem?.metaData?.consumables || rawItem?.consumableItems || null,
           ...(rawItem?.serviceId ? { serviceId: String(rawItem.serviceId) } : {}),
           ...(rawItem?.productId ? { product: { connect: { id: String(rawItem.productId) } } } : {}),
           ...(rawItem?.membershipPlanId ? { membershipPlan: { connect: { id: String(rawItem.membershipPlanId) } } } : {}),
@@ -582,6 +583,22 @@ export const registerBillingRoutes = (ownerRouter) => {
                 });
               }
             }
+            const removedCustomConsumables = Array.isArray(removed.consumableData) ? removed.consumableData : [];
+            for (const ci of removedCustomConsumables) {
+              if (ci.productId && Number(ci.qty) > 0) {
+                await createStockMovement(tx, {
+                  salonId: req.salonId,
+                  branchId: existingInvoice.branchId,
+                  productId: ci.productId,
+                  quantity: Number(ci.qty) * Number(removed.qty || 1),
+                  movementType: "PRODUCT_RETURN",
+                  createdByUserId: req.user.id,
+                  referenceType: "INVOICE_EDIT",
+                  referenceId: existingInvoice.id,
+                  note: `Custom consumable return: ${ci.name || ""}`
+                });
+              }
+            }
           }
         }
         await tx.invoiceItem.deleteMany({
@@ -600,7 +617,8 @@ export const registerBillingRoutes = (ownerRouter) => {
             unitPrice: item.unitPrice,
             taxPct: item.taxPct,
             lineTotal: item.lineTotal,
-            complimentaryRemark: item.complimentaryRemark || null
+            complimentaryRemark: item.complimentaryRemark || null,
+            consumableData: item.consumableData || undefined
           };
 
           if (item.id) {
@@ -708,6 +726,23 @@ export const registerBillingRoutes = (ownerRouter) => {
                       allowNegativeStock: true
                     });
                   }
+                }
+              }
+              const customConsumables = Array.isArray(item.consumableData) ? item.consumableData : [];
+              for (const ci of customConsumables) {
+                if (ci.productId && Number(ci.qty) > 0) {
+                  await createStockMovement(tx, {
+                    salonId: req.salonId,
+                    branchId: existingInvoice.branchId,
+                    productId: ci.productId,
+                    quantity: -Number(ci.qty) * Number(item.qty || 1),
+                    movementType: "CONSUMABLE_USAGE",
+                    createdByUserId: req.user.id,
+                    referenceType: "INVOICE_EDIT",
+                    referenceId: existingInvoice.id,
+                    note: `Custom consumable: ${ci.name || ""} (${ci.qty} ${ci.unit || ""})`,
+                    allowNegativeStock: true
+                  });
                 }
               }
             }
@@ -960,6 +995,54 @@ export const registerBillingRoutes = (ownerRouter) => {
       const updated = await prisma.invoice.update({
         where: { id: invoice.id },
         data: { status: "PAID", balanceAmount: 0, completedAt: new Date() }
+      });
+
+      await prisma.$transaction(async (tx) => {
+        for (const item of invoice.items) {
+          if (item.itemType === "SERVICE" && item.serviceId) {
+            const svc = await tx.service.findUnique({ where: { id: item.serviceId }, include: { consumables: { include: { product: true } } } });
+            if (svc && svc.consumables && svc.consumables.length > 0) {
+              const serviceVariation = item.variation || null;
+              const matchedConsumables = svc.consumables.filter(c => c.variation === serviceVariation || (serviceVariation == null && c.variation == null));
+              for (const cons of matchedConsumables.length > 0 ? matchedConsumables : svc.consumables.filter(c => c.variation == null)) {
+                const qtyToDeduct = Number(cons.reqdQty);
+                if (qtyToDeduct > 0) {
+                  await createStockMovement(tx, {
+                    salonId: req.salonId,
+                    branchId: invoice.branchId || null,
+                    productId: cons.productId,
+                    quantity: -qtyToDeduct * Number(item.qty || 1),
+                    movementType: "CONSUMABLE_USAGE",
+                    createdByUserId: req.user.id,
+                    referenceType: "INVOICE",
+                    referenceId: invoice.id,
+                    note: `Predefined consumable: ${cons.product?.name || ""} (${qtyToDeduct} ${cons.product?.unit || ""})`,
+                    allowNegativeStock: true
+                  });
+                }
+              }
+            }
+            const customConsumables = Array.isArray(item.consumableData) ? item.consumableData : (Array.isArray(item.consumableItems) ? item.consumableItems : []);
+            if (customConsumables.length > 0) {
+              for (const ci of customConsumables) {
+                if (ci.productId && Number(ci.qty) > 0) {
+                  await createStockMovement(tx, {
+                    salonId: req.salonId,
+                    branchId: invoice.branchId || null,
+                    productId: ci.productId,
+                    quantity: -Number(ci.qty) * Number(item.qty || 1),
+                    movementType: "CONSUMABLE_USAGE",
+                    createdByUserId: req.user.id,
+                    referenceType: "INVOICE",
+                    referenceId: invoice.id,
+                    note: `Custom consumable: ${ci.name || ""} (${ci.qty} ${ci.unit || ""})`,
+                    allowNegativeStock: true
+                  });
+                }
+              }
+            }
+          }
+        }
       });
 
       if (invoice.appointmentId) {
