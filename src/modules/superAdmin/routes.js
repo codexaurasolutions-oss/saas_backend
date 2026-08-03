@@ -739,7 +739,7 @@ superAdminRouter.get("/product-requirements", asyncHandler(async (req, res) => {
       { vendor: { contains: req.query.q, mode: "insensitive" } }
     ];
   }
-  const rows = await prisma.productRequirement.findMany({ where, orderBy: { createdAt: "desc" } });
+  const rows = await prisma.productRequirement.findMany({ where, include: { salon: true }, orderBy: { createdAt: "desc" } });
   res.json(rows);
 }));
 
@@ -791,7 +791,7 @@ superAdminRouter.get("/staff-requirements", asyncHandler(async (req, res) => {
       { skills: { contains: req.query.q, mode: "insensitive" } }
     ];
   }
-  const rows = await prisma.staffRequirement.findMany({ where, orderBy: { createdAt: "desc" } });
+  const rows = await prisma.staffRequirement.findMany({ where, include: { salon: true }, orderBy: { createdAt: "desc" } });
   res.json(rows);
 }));
 
