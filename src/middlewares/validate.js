@@ -540,7 +540,7 @@ export const schemas = {
       reviewNote: z.string().optional()
     })
   }),
-  demoLeadReject: z.object({ body: z.object({ reviewNote: z.string().min(2) }) }),
+  demoLeadReject: z.object({ body: z.object({ reviewNote: z.string().optional() }) }),
   supportTicket: z.object({ body: z.object({ title: z.string().min(2), category: z.string().optional(), priority: z.string().optional(), description: z.string().optional(), attachmentUrl: z.string().optional() }) }),
   supportTicketMessage: z.object({ body: z.object({ message: z.string().min(2), attachmentUrl: z.string().optional() }) }),
   salonSettings: z.object({ body: z.object({ invoicePrefix: z.string().optional(), invoiceFooter: z.string().optional(), taxLabel: z.string().optional(), paymentModes: z.any().optional(), whatsappNumber: optionalIndianPhoneSchema, bookingNotes: z.string().optional(), cancellationPolicy: z.string().optional(), branchId: z.string().nullable().optional(), paymentGatewaySettings: z.any().optional(), advancedSettings: z.any().optional(), smsSettings: z.any().optional(), allowNegativeStock: z.boolean().optional() }) }),
