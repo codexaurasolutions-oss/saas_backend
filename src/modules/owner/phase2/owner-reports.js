@@ -58,7 +58,7 @@ export const registerOwnerReportRoutes = (ownerRouter) => {
     const branchFilter = branchId ? { branchId } : {};
 
     const invoices = await prisma.invoice.findMany({
-      where: { salonId: req.salonId, ...branchFilter, createdAt: dateFilter, status: { not: "VOID" } },
+      where: { salonId: req.salonId, ...branchFilter, createdAt: dateFilter, status: { not: "CANCELLED" } },
       include: { items: true }
     });
 
