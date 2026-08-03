@@ -419,6 +419,22 @@ superAdminRouter.post("/subscriptions/run-demo-cleanup", asyncHandler(async (req
   return res.json(result);
 }));
 
+superAdminRouter.post("/demo-leads", validate(schemas.superAdminDemoLeadCreate), asyncHandler(async (req, res) => {
+  const lead = await prisma.demoLead.create({
+    data: {
+      name: req.body.name,
+      email: req.body.email,
+      phone: req.body.phone,
+      company: req.body.company,
+      message: req.body.message,
+      leadSource: req.body.leadSource,
+      leadNotes: req.body.leadNotes,
+      status: "NEW"
+    }
+  });
+  res.status(201).json(lead);
+}));
+
 superAdminRouter.get("/demo-leads", asyncHandler(async (req, res) => {
   const status = req.query.status ? String(req.query.status) : "";
   const q = req.query.q ? String(req.query.q).trim() : "";

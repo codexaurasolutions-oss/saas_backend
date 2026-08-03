@@ -531,6 +531,17 @@ export const schemas = {
       message: z.string().optional()
     })
   }),
+  superAdminDemoLeadCreate: z.object({
+    body: z.object({
+      name: z.string().min(2),
+      email: emailLikeSchema,
+      phone: indianPhoneSchema,
+      company: z.string().optional(),
+      message: z.string().optional(),
+      leadSource: z.string().optional(),
+      leadNotes: z.string().optional()
+    })
+  }),
   demoLeadReview: z.object({
     body: z.object({
       planId: z.string().optional(),
