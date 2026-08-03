@@ -965,6 +965,16 @@ superAdminRouter.delete("/branches/:id", asyncHandler(async (req, res) => {
   res.json({ message: "Deleted" });
 }));
 
+superAdminRouter.get("/traffic-analytics", asyncHandler(async (req, res) => {
+  res.json({
+    summary: { totalVisits: 0, uniqueVisitors: 0, todayVisits: 0, yesterdayVisits: 0 },
+    visitsByDay: [],
+    topPages: [],
+    topPaths: [],
+    topReferrers: []
+  });
+}));
+
 const AVAILABLE_PAGES = [
   { key: "dashboard", label: "Dashboard", group: "Platform Command" },
   { key: "salons", label: "Salons Control", group: "Platform Command" },
