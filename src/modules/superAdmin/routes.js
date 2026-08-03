@@ -875,7 +875,10 @@ superAdminRouter.get("/branches", asyncHandler(async (req, res) => {
   }
   const rows = await prisma.branch.findMany({
     where,
-    include: { salon: { select: { id: true, name: true } } },
+    include: { 
+      salon: { select: { id: true, name: true } },
+      _count: { select: { users: true, services: true } }
+    },
     orderBy: { createdAt: "desc" }
   });
   res.json(rows);
