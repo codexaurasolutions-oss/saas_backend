@@ -463,6 +463,8 @@ model DemoLead {
   phone               String
   company             String?
   message             String?
+  leadSource          String?
+  leadNotes           String?
   status              DemoLeadStatus       @default(NEW)
   salonId             String?
   approvedUserId      String?
