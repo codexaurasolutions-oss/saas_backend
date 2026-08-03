@@ -337,6 +337,20 @@ export const checkStaffAvailability = async ({
         error.status = 400;
         throw error;
       }
+      if (rosterRow.breaks && Array.isArray(rosterRow.breaks)) {
+        const breakWindow = rosterRow.breaks.find((brk) => {
+          if (brk.active === false) return false;
+          if (!brk.fromTime || !brk.toTime) return false;
+          const breakStart = timeToMinutes(brk.fromTime);
+          const breakEnd = timeToMinutes(brk.toTime);
+          return timeWindowOverlap(breakStart, breakEnd, startMinutes, endMinutes);
+        });
+        if (breakWindow) {
+          const error = new Error(`${membership.user.name} has a scheduled break in this slot (${breakWindow.name})`);
+          error.status = 400;
+          throw error;
+        }
+      }
     } else {
       const schedule = membership.staffSchedules.find((item) => item.weekday === weekday);
       if (schedule) {
