@@ -2009,8 +2009,8 @@ ownerRouter.post("/product-requirements", async (req, res) => {
     productName: req.body.productName,
     description: req.body.description || null,
     category: req.body.category || null,
-    quantity: req.body.requiredQty || req.body.quantity || 1,
-    unitPrice: req.body.unitCost || req.body.unitPrice || null,
+    quantity: parseInt(req.body.requiredQty || req.body.quantity || 1, 10),
+    unitPrice: req.body.unitCost || req.body.unitPrice ? parseFloat(req.body.unitCost || req.body.unitPrice) : null,
     priority: req.body.priority || "MEDIUM",
     status: req.body.status || "PENDING",
     vendor: req.body.vendor || null
@@ -2025,8 +2025,8 @@ ownerRouter.patch("/product-requirements/:id", async (req, res) => {
   if (req.body.productName !== undefined) data.productName = req.body.productName;
   if (req.body.description !== undefined) data.description = req.body.description;
   if (req.body.category !== undefined) data.category = req.body.category;
-  if (req.body.requiredQty !== undefined || req.body.quantity !== undefined) data.quantity = req.body.requiredQty || req.body.quantity;
-  if (req.body.unitCost !== undefined || req.body.unitPrice !== undefined) data.unitPrice = req.body.unitCost || req.body.unitPrice;
+  if (req.body.requiredQty !== undefined || req.body.quantity !== undefined) data.quantity = parseInt(req.body.requiredQty || req.body.quantity, 10);
+  if (req.body.unitCost !== undefined || req.body.unitPrice !== undefined) data.unitPrice = parseFloat(req.body.unitCost || req.body.unitPrice);
   if (req.body.priority !== undefined) data.priority = req.body.priority;
   if (req.body.status !== undefined) data.status = req.body.status;
   if (req.body.vendor !== undefined) data.vendor = req.body.vendor;

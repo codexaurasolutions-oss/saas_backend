@@ -469,6 +469,29 @@ superAdminRouter.get("/demo-leads", asyncHandler(async (req, res) => {
     })
   );
 }));
+
+superAdminRouter.post("/demo-leads/:id/create-zoho-meeting", asyncHandler(async (req, res) => {
+  const lead = await prisma.demoLead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  const meetingCode = `rsp-${Math.random().toString(36).substring(2, 8)}`;
+  res.json({ meetingUrl: `https://meeting.zoho.com/meeting/join?key=${meetingCode}` });
+}));
+
+superAdminRouter.post("/demo-leads/:id/schedule-meeting", asyncHandler(async (req, res) => {
+  await prisma.demoLead.update({
+    where: { id: req.params.id },
+    data: { status: "DEMO_SCHEDULED" }
+  });
+  res.json({ success: true, message: "Meeting scheduled" });
+}));
+
+superAdminRouter.post("/demo-leads/:id/contacted", asyncHandler(async (req, res) => {
+  await prisma.demoLead.update({
+    where: { id: req.params.id },
+    data: { status: "CONNECTED" }
+  });
+  res.json({ success: true, message: "Marked as connected" });
+}));
 superAdminRouter.post("/demo-leads/:id/approve", validate(schemas.demoLeadReview), asyncHandler(async (req, res) => {
   const result = await approveDemoLead({
     leadId: req.params.id,
@@ -752,8 +775,8 @@ superAdminRouter.post("/product-requirements", asyncHandler(async (req, res) => 
     productName: req.body.productName,
     description: req.body.description || null,
     category: req.body.category || null,
-    quantity: req.body.requiredQty || req.body.quantity || 1,
-    unitPrice: req.body.unitCost || req.body.unitPrice || null,
+    quantity: parseInt(req.body.requiredQty || req.body.quantity || 1, 10),
+    unitPrice: req.body.unitCost || req.body.unitPrice ? parseFloat(req.body.unitCost || req.body.unitPrice) : null,
     priority: req.body.priority || "MEDIUM",
     status: req.body.status || "PENDING",
     vendor: req.body.vendor || null
@@ -768,8 +791,8 @@ superAdminRouter.patch("/product-requirements/:id", asyncHandler(async (req, res
   if (req.body.productName !== undefined) data.productName = req.body.productName;
   if (req.body.description !== undefined) data.description = req.body.description;
   if (req.body.category !== undefined) data.category = req.body.category;
-  if (req.body.requiredQty !== undefined || req.body.quantity !== undefined) data.quantity = req.body.requiredQty || req.body.quantity;
-  if (req.body.unitCost !== undefined || req.body.unitPrice !== undefined) data.unitPrice = req.body.unitCost || req.body.unitPrice;
+  if (req.body.requiredQty !== undefined || req.body.quantity !== undefined) data.quantity = parseInt(req.body.requiredQty || req.body.quantity, 10);
+  if (req.body.unitCost !== undefined || req.body.unitPrice !== undefined) data.unitPrice = parseFloat(req.body.unitCost || req.body.unitPrice);
   if (req.body.priority !== undefined) data.priority = req.body.priority;
   if (req.body.status !== undefined) data.status = req.body.status;
   if (req.body.vendor !== undefined) data.vendor = req.body.vendor;
