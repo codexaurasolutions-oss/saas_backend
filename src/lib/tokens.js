@@ -36,3 +36,14 @@ export const verifyLoginAccessToken = (token) => {
   if (decoded?.purpose !== "DEMO_LOGIN") throw new Error("Invalid login access token");
   return decoded;
 };
+
+export const signTempToken = (payload, options) => {
+  return jwt.sign({ ...payload, purpose: "OTP_VERIFICATION" }, process.env.JWT_SECRET, { expiresIn: options?.expiresIn || "10m" });
+};
+
+export const verifyTempToken = (token) => {
+  if (isTokenRevoked(token)) throw new Error("Token has been revoked");
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (decoded?.purpose !== "OTP_VERIFICATION") throw new Error("Invalid temp token purpose");
+  return decoded;
+};

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
-import { signAccessToken, signRefreshToken, verifyLoginAccessToken, verifyRefreshToken } from "../../lib/tokens.js";
+import { signAccessToken, signRefreshToken, verifyLoginAccessToken, verifyRefreshToken, signTempToken, verifyTempToken } from "../../lib/tokens.js";
 import { validate, schemas } from "../../middlewares/validate.js";
 import { hashPasswordSetupToken, generateRawPasswordSetupToken } from "../../lib/passwordSetup.js";
 import { sendMail } from "../../lib/mailer.js";
@@ -26,6 +26,68 @@ const sortMemberships = (memberships = []) =>
     if (roleDiff !== 0) return roleDiff;
     return new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime();
   });
+
+const generateLoginPayload = async (user, membership) => {
+  const [salon, subscription] = membership
+    ? await Promise.all([
+        prisma.salon.findUnique({ where: { id: membership.salonId }, select: { name: true, featureFlags: true } }),
+        prisma.subscription.findFirst({
+          where: { salonId: membership.salonId, status: { in: ["ACTIVE", "TRIAL"] } },
+          include: { plan: true },
+          orderBy: { endsAt: "desc" }
+        })
+      ])
+    : [null, null];
+  const resolvedSalonId = membership?.salonId || null;
+  const accessToken = signAccessToken({ userId: user.id, salonId: resolvedSalonId });
+  const refreshToken = signRefreshToken({ userId: user.id, salonId: resolvedSalonId });
+  const mergedFeatureFlags = {
+    ...(subscription?.plan?.featureFlags || {}),
+    ...(salon?.featureFlags || {})
+  };
+  const mergedPermissions = membership
+    ? membership.salonRole === "SALON_OWNER"
+      ? { ...defaultOwnerPermissions, ...(membership.permissions || {}) }
+      : (await (async () => {
+          if (membership.customRoleId) {
+            const customRole = await prisma.customRole.findFirst({ where: { id: membership.customRoleId, salonId: membership.salonId } });
+            if (customRole) {
+              return { ...(membership.permissions || {}), ...(customRole.permissions || {}) };
+            }
+          }
+          return membership.permissions || {};
+        })())
+    : null;
+
+  return {
+    accessToken,
+    refreshToken,
+    user: { id: user.id, name: user.name, systemRole: user.systemRole },
+    membership: membership
+      ? {
+          salonId: membership.salonId,
+          salonName: salon?.name || membership.salon?.name || null,
+          salonRole: membership.salonRole,
+          branchId: membership.branchId || null,
+          customRoleId: membership.customRoleId || null,
+          permissions: mergedPermissions || {},
+          featureFlags: mergedFeatureFlags,
+          plan: subscription?.plan
+            ? {
+                id: subscription.plan.id,
+                name: subscription.plan.name,
+                branchLimit: subscription.plan.branchLimit,
+                userLimit: subscription.plan.userLimit,
+                customerLimit: subscription.plan.customerLimit,
+                invoiceLimit: subscription.plan.invoiceLimit,
+                storageLimit: subscription.plan.storageLimit,
+                isCustom: subscription.plan.isCustom
+              }
+            : null
+        }
+      : null
+  };
+};
 
 authRouter.post("/register", validate(schemas.register), async (req, res) => {
   const { name, email, password, systemRole = "SALON_USER", salonId } = req.body;
@@ -114,65 +176,99 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
       return res.status(403).json({ message: "Invalid demo login link." });
     }
   }
-  const [salon, subscription] = membership
-    ? await Promise.all([
-        prisma.salon.findUnique({ where: { id: membership.salonId }, select: { name: true, featureFlags: true } }),
-        prisma.subscription.findFirst({
-          where: { salonId: membership.salonId, status: { in: ["ACTIVE", "TRIAL"] } },
-          include: { plan: true },
-          orderBy: { endsAt: "desc" }
-        })
-      ])
-    : [null, null];
-  const resolvedSalonId = membership?.salonId || null;
-  const accessToken = signAccessToken({ userId: user.id, salonId: resolvedSalonId });
-  const refreshToken = signRefreshToken({ userId: user.id, salonId: resolvedSalonId });
-  const mergedFeatureFlags = {
-    ...(subscription?.plan?.featureFlags || {}),
-    ...(salon?.featureFlags || {})
-  };
-  const mergedPermissions = membership
-    ? membership.salonRole === "SALON_OWNER"
-      ? { ...defaultOwnerPermissions, ...(membership.permissions || {}) }
-      : (await (async () => {
-          if (membership.customRoleId) {
-            const customRole = await prisma.customRole.findFirst({ where: { id: membership.customRoleId, salonId: membership.salonId } });
-            if (customRole) {
-              return { ...(membership.permissions || {}), ...(customRole.permissions || {}) };
-            }
-          }
-          return membership.permissions || {};
-        })())
-    : null;
+  if (user.systemRole === "SALON_USER" && membership?.salonRole === "SALON_OWNER") {
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const tempToken = signTempToken({ userId: user.id, salonId: membership.salonId, otp });
+    
+    // Send email
+    await sendMail({
+      to: user.email,
+      subject: "Your SalonNest Login OTP",
+      html: `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>SalonNest Login Verification</h2>
+          <p>Your OTP for logging in is: <strong style="font-size: 24px;">${otp}</strong></p>
+          <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
+        </div>
+      `
+    });
 
-  res.json({
-    accessToken,
-    refreshToken,
-    user: { id: user.id, name: user.name, systemRole: user.systemRole },
-    membership: membership
-      ? {
-          salonId: membership.salonId,
-          salonName: salon?.name || membership.salon?.name || null,
-          salonRole: membership.salonRole,
-          branchId: membership.branchId || null,
-          customRoleId: membership.customRoleId || null,
-          permissions: mergedPermissions || {},
-          featureFlags: mergedFeatureFlags,
-          plan: subscription?.plan
-            ? {
-                id: subscription.plan.id,
-                name: subscription.plan.name,
-                branchLimit: subscription.plan.branchLimit,
-                userLimit: subscription.plan.userLimit,
-                customerLimit: subscription.plan.customerLimit,
-                invoiceLimit: subscription.plan.invoiceLimit,
-                storageLimit: subscription.plan.storageLimit,
-                isCustom: subscription.plan.isCustom
-              }
-            : null
+    return res.json({
+      requireOtp: true,
+      tempToken,
+      otp: process.env.NODE_ENV === "development" ? otp : undefined
+    });
+  }
+
+  const payload = await generateLoginPayload(user, membership);
+  res.json(payload);
+});
+
+authRouter.post("/verify-otp", async (req, res) => {
+  const { tempToken, otp } = req.body;
+  if (!tempToken || !otp) return res.status(400).json({ message: "Token and OTP are required" });
+
+  try {
+    const decoded = verifyTempToken(tempToken);
+    if (decoded.otp !== otp) {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      include: {
+        memberships: {
+          include: { salon: true }
         }
-      : null
-  });
+      }
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const activeMemberships = sortMemberships(
+      (user.memberships || []).filter((membership) => membership?.salon?.status !== "SUSPENDED")
+    );
+    const membership = activeMemberships.find((item) => item.salonId === decoded.salonId) || activeMemberships[0] || null;
+
+    const payload = await generateLoginPayload(user, membership);
+    res.json(payload);
+  } catch (err) {
+    res.status(401).json({ message: "Invalid or expired token" });
+  }
+});
+
+authRouter.post("/resend-otp", async (req, res) => {
+  const { tempToken } = req.body;
+  if (!tempToken) return res.status(400).json({ message: "Token is required" });
+
+  try {
+    const decoded = verifyTempToken(tempToken);
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const newTempToken = signTempToken({ userId: decoded.userId, salonId: decoded.salonId, otp });
+
+    await sendMail({
+      to: user.email,
+      subject: "Your SalonNest Login OTP",
+      html: `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>SalonNest Login Verification</h2>
+          <p>Your new OTP for logging in is: <strong style="font-size: 24px;">${otp}</strong></p>
+          <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
+        </div>
+      `
+    });
+
+    res.json({
+      tempToken: newTempToken,
+      otp: process.env.NODE_ENV === "development" ? otp : undefined
+    });
+  } catch (err) {
+    res.status(401).json({ message: "Invalid or expired token" });
+  }
 });
 
 authRouter.post("/refresh", async (req, res) => {
