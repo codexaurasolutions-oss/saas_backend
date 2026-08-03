@@ -637,7 +637,7 @@ ownerRouter.post("/service-categories/import", requireSalonPermission("services"
 ownerRouter.get("/service-categories", requireSalonPermission("services", "view"), async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);
   const svcWhere = { isActive: true, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) };
-  const catWhere = { salonId: req.salonId, isActive: true, parentId: null, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) };
+  const catWhere = { salonId: req.salonId, isActive: true, parentId: null };
   res.json(await prisma.serviceCategory.findMany({ where: catWhere, include: { children: { where: { isActive: true }, include: { services: { where: svcWhere } } }, services: { where: svcWhere }, }, orderBy: { createdAt: "desc" } }));
 });
 ownerRouter.post("/service-categories", requireSalonPermission("services", "create"), async (req, res) => {
@@ -647,7 +647,7 @@ ownerRouter.post("/service-categories", requireSalonPermission("services", "crea
   const where = { salonId: req.salonId, name: name.trim(), isActive: true, parentId: parentId || null };
   const existing = await prisma.serviceCategory.findFirst({ where });
   if (existing) return res.status(409).json({ message: "Category with this name already exists" });
-  const data = { salonId: req.salonId, name: name.trim(), branchId };
+  const data = { salonId: req.salonId, name: name.trim() };
   if (parentId) data.parentId = parentId;
   res.status(201).json(await prisma.serviceCategory.create({ data, include: { children: true } }));
 });
