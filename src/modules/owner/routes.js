@@ -416,17 +416,11 @@ ownerRouter.get("/branches", requireSalonPermission("branches", "view"), async (
   });
   res.json(rows);
 });
-ownerRouter.post("/branches", requireSalonPermission("branches", "create"), validate(schemas.branch), async (req, res) => {
-  try {
-    res.status(201).json(await prisma.branch.create({ data: { ...req.body, email: req.body.email || null, salonId: req.salonId } }));
-  } catch (err) {
-    console.error("[BranchCreate]", err);
-    if (err?.code === "P2002") {
-      return res.status(409).json({ message: "A branch with this name already exists in your salon." });
-    }
-    res.status(400).json({ message: err?.message || "Could not save branch." });
-  }
+ownerRouter.post("/branches", requireSalonPermission("branches", "create"), async (req, res) => {
+  // Branch creation is reserved for Super Admin only
+  return res.status(403).json({ message: "Branches can only be created by Super Admin. Please contact your platform administrator to add a new branch." });
 });
+
 ownerRouter.patch("/branches/:id", requireSalonPermission("branches", "edit"), validate(schemas.branch), async (req, res) => {
   try {
     const row = await findScoped("branch", req.salonId, req.params.id);
@@ -441,10 +435,10 @@ ownerRouter.patch("/branches/:id", requireSalonPermission("branches", "edit"), v
   }
 });
 ownerRouter.patch("/branches/:id/archive", requireSalonPermission("branches", "delete"), async (req, res) => {
-  const row = await findScoped("branch", req.salonId, req.params.id);
-  if (!row) return res.status(404).json({ message: "Branch not found" });
-  res.json(await prisma.branch.update({ where: { id: req.params.id }, data: { isActive: false } }));
+  // Branch deletion is reserved for Super Admin only
+  return res.status(403).json({ message: "Branches can only be deleted by Super Admin. Please contact your platform administrator." });
 });
+
 
 ownerRouter.get("/service-categories/export", requireSalonPermission("services", "view"), async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);
@@ -1994,7 +1988,7 @@ ownerRouter.get("/products", async (req, res) => {
 });
 
 ownerRouter.get("/product-requirements", async (req, res) => {
-  const where = {};
+  const where = { salonId: req.salonId };
   if (req.query.status) where.status = req.query.status;
   if (req.query.priority) where.priority = req.query.priority;
   if (req.query.branchId) where.branchId = req.query.branchId;
@@ -2011,6 +2005,7 @@ ownerRouter.get("/product-requirements", async (req, res) => {
 
 ownerRouter.post("/product-requirements", async (req, res) => {
   const row = await prisma.productRequirement.create({ data: {
+    salonId: req.salonId,
     productName: req.body.productName,
     description: req.body.description || null,
     category: req.body.category || null,
@@ -2024,7 +2019,7 @@ ownerRouter.post("/product-requirements", async (req, res) => {
 });
 
 ownerRouter.patch("/product-requirements/:id", async (req, res) => {
-  const existing = await prisma.productRequirement.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.productRequirement.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
   if (!existing) return res.status(404).json({ message: "Not found" });
   const data = {};
   if (req.body.productName !== undefined) data.productName = req.body.productName;
@@ -2039,6 +2034,8 @@ ownerRouter.patch("/product-requirements/:id", async (req, res) => {
 });
 
 ownerRouter.delete("/product-requirements/:id", async (req, res) => {
+  const existing = await prisma.productRequirement.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
+  if (!existing) return res.status(404).json({ message: "Not found" });
   await prisma.productRequirement.delete({ where: { id: req.params.id } });
   res.json({ message: "Deleted" });
 });

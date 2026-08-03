@@ -55,7 +55,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
       where: {
         salonId: req.salonId,
         isActive: true,
-        ...(branchId ? { OR: [{ branchId }, { branchId: null }, { stockMovements: { some: { branchId } } }] } : {}),
+        ...(branchId ? { branchId } : {}),
         ...(categoryId ? { categoryId } : {}),
         ...(productType ? { productType } : {}),
         ...(q ? {
@@ -258,7 +258,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
       where: {
         salonId: req.salonId,
         isActive: true,
-        ...(branchId ? { OR: [{ branchId }, { branchId: null }, { stockMovements: { some: { branchId } } }] } : {}),
+        ...(branchId ? { branchId } : {}),
         ...(categoryId ? { categoryId } : {}),
         ...(q ? {
           OR: [

@@ -680,7 +680,7 @@ export const registerBillingRoutes = (ownerRouter) => {
                         createdByUserId: req.user.id,
                         referenceType: "INVOICE_EDIT",
                         referenceId: existingInvoice.id,
-                        allowNegativeStock: true
+                        allowNegativeStock: false
                       });
                     }
                   }
@@ -723,7 +723,7 @@ export const registerBillingRoutes = (ownerRouter) => {
                       referenceType: "INVOICE_EDIT",
                       referenceId: existingInvoice.id,
                       note: overrideQty != null ? `Override: ${overrideQty} ${cons.product?.unit || ""} (default: ${cons.reqdQty})` : null,
-                      allowNegativeStock: true
+                      allowNegativeStock: false
                     });
                   }
                 }
@@ -741,7 +741,7 @@ export const registerBillingRoutes = (ownerRouter) => {
                     referenceType: "INVOICE_EDIT",
                     referenceId: existingInvoice.id,
                     note: `Custom consumable: ${ci.name || ""} (${ci.qty} ${ci.unit || ""})`,
-                    allowNegativeStock: true
+                    allowNegativeStock: false
                   });
                 }
               }
@@ -1017,7 +1017,7 @@ export const registerBillingRoutes = (ownerRouter) => {
                     referenceType: "INVOICE",
                     referenceId: invoice.id,
                     note: `Predefined consumable: ${cons.product?.name || ""} (${qtyToDeduct} ${cons.product?.unit || ""})`,
-                    allowNegativeStock: true
+                    allowNegativeStock: false
                   });
                 }
               }
@@ -1036,7 +1036,7 @@ export const registerBillingRoutes = (ownerRouter) => {
                     referenceType: "INVOICE",
                     referenceId: invoice.id,
                     note: `Custom consumable: ${ci.name || ""} (${ci.qty} ${ci.unit || ""})`,
-                    allowNegativeStock: true
+                    allowNegativeStock: false
                   });
                 }
               }

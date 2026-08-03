@@ -833,7 +833,7 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
                 referenceType: "INVOICE",
                 referenceId: invoice.id,
                 note: overrideQty != null ? `Override: ${overrideQty} ${cons.product?.unit || ""} (default: ${cons.reqdQty})` : null,
-                allowNegativeStock: true
+                allowNegativeStock: false
               });
             }
           }
@@ -851,7 +851,7 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
                 referenceType: "INVOICE",
                 referenceId: invoice.id,
                 note: `Custom consumable: ${ci.name || ""} (${ci.qty} ${ci.unit || ""})`,
-                allowNegativeStock: true
+                allowNegativeStock: false
               });
             }
           }
