@@ -182,8 +182,8 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
     console.log(`\n🔑 [LOGIN OTP] User: ${user.email} | OTP: ${otp}\n`);
     const tempToken = signTempToken({ userId: user.id, salonId: membership.salonId, otp });
     
-    // Send email
-    await sendMail({
+    // Send email asynchronously so we don't block the login response
+    sendMail({
       to: user.email,
       subject: "Your SalonNest Login OTP",
       html: `
@@ -193,7 +193,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
           <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
         </div>
       `
-    });
+    }).catch(err => console.error("[Login OTP Email Error]", err));
 
     return res.json({
       requireOtp: true,
