@@ -404,9 +404,23 @@ ownerRouter.get("/global-search", requireSalonPermission("customers", "view"), a
   res.json({ results: results.slice(0, 20) });
 });
 
+ownerRouter.get("/branches/limit-info", requireSalonPermission("branches", "view"), async (req, res) => {
+  const salonId = req.salonId;
+  const branchCount = await prisma.branch.count({ where: { salonId } });
+  const subscription = await prisma.subscription.findFirst({
+    where: { salonId },
+    include: { plan: { select: { id: true, name: true, branchLimit: true } } },
+    orderBy: { startsAt: "desc" }
+  });
+  const plan = subscription?.plan || null;
+  const branchLimit = plan?.branchLimit ?? 9999;
+  const remaining = Math.max(0, branchLimit - branchCount);
+  res.json({ branchCount, branchLimit, remaining, planName: plan?.name || "No Plan" });
+});
+
 ownerRouter.get("/branches", requireSalonPermission("branches", "view"), async (req, res) => {
   const rows = await prisma.branch.findMany({
-    where: { salonId: req.salonId, isActive: true },
+    where: { salonId: req.salonId },
     include: {
       _count: {
         select: { users: true, services: true, invoices: true }
@@ -416,9 +430,41 @@ ownerRouter.get("/branches", requireSalonPermission("branches", "view"), async (
   });
   res.json(rows);
 });
+
 ownerRouter.post("/branches", requireSalonPermission("branches", "create"), async (req, res) => {
-  // Branch creation is reserved for Super Admin only
-  return res.status(403).json({ message: "Branches can only be created by Super Admin. Please contact your platform administrator to add a new branch." });
+  const { name, phone, email, address, businessHours, weeklyOff, latitude, longitude, geofenceRadiusMeters } = req.body;
+  if (!name) return res.status(400).json({ message: "Branch name is required" });
+  const salonId = req.salonId;
+
+  const branchCount = await prisma.branch.count({ where: { salonId } });
+  const subscription = await prisma.subscription.findFirst({
+    where: { salonId },
+    include: { plan: { select: { branchLimit: true, name: true } } },
+    orderBy: { startsAt: "desc" }
+  });
+  const branchLimit = subscription?.plan?.branchLimit ?? 9999;
+
+  if (branchCount >= branchLimit) {
+    return res.status(400).json({ message: `Branch limit reached. Your ${subscription?.plan?.name || "plan"} allows ${branchLimit} branches. ${branchCount} already exist. Upgrade your plan to add more branches.` });
+  }
+
+  const existing = await prisma.branch.findFirst({ where: { salonId, name: { equals: name, mode: "insensitive" } } });
+  if (existing) return res.status(409).json({ message: `A branch named "${name}" already exists in this salon.` });
+
+  const row = await prisma.branch.create({ data: {
+    salonId,
+    name,
+    phone: phone || null,
+    email: email || null,
+    address: address || null,
+    businessHours: businessHours || null,
+    weeklyOff: weeklyOff || null,
+    latitude: latitude != null ? Number(latitude) : null,
+    longitude: longitude != null ? Number(longitude) : null,
+    geofenceRadiusMeters: geofenceRadiusMeters != null ? Number(geofenceRadiusMeters) : 200
+  }});
+
+  res.status(201).json(row);
 });
 
 ownerRouter.patch("/branches/:id", requireSalonPermission("branches", "edit"), validate(schemas.branch), async (req, res) => {
@@ -434,11 +480,28 @@ ownerRouter.patch("/branches/:id", requireSalonPermission("branches", "edit"), v
     res.status(400).json({ message: err?.message || "Could not update branch." });
   }
 });
-ownerRouter.patch("/branches/:id/archive", requireSalonPermission("branches", "delete"), async (req, res) => {
-  // Branch deletion is reserved for Super Admin only
-  return res.status(403).json({ message: "Branches can only be deleted by Super Admin. Please contact your platform administrator." });
-});
 
+ownerRouter.delete("/branches/:id", requireSalonPermission("branches", "delete"), async (req, res) => {
+  const existing = await prisma.branch.findFirst({
+    where: { id: req.params.id, salonId: req.salonId },
+    include: {
+      _count: { select: { users: true, services: true, invoices: true, appointments: true, products: true } }
+    }
+  });
+  if (!existing) return res.status(404).json({ message: "Branch not found" });
+  const counts = existing._count;
+  const deps = [];
+  if (counts.users > 0) deps.push(`${counts.users} staff`);
+  if (counts.services > 0) deps.push(`${counts.services} services`);
+  if (counts.invoices > 0) deps.push(`${counts.invoices} invoices`);
+  if (counts.appointments > 0) deps.push(`${counts.appointments} appointments`);
+  if (counts.products > 0) deps.push(`${counts.products} products`);
+  if (deps.length > 0) {
+    return res.status(400).json({ message: `Cannot delete branch "${existing.name}" — it has ${deps.join(", ")}. Archive or reassign them first.` });
+  }
+  await prisma.branch.delete({ where: { id: req.params.id } });
+  res.json({ message: "Deleted" });
+});
 
 ownerRouter.get("/service-categories/export", requireSalonPermission("services", "view"), async (req, res) => {
   const branchId = normalizeBranchId(req.query.branchId);

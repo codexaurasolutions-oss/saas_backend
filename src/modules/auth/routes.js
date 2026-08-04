@@ -179,6 +179,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
   if (user.systemRole === "SALON_USER" && membership?.salonRole === "SALON_OWNER") {
     // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`\n🔑 [LOGIN OTP] User: ${user.email} | OTP: ${otp}\n`);
     const tempToken = signTempToken({ userId: user.id, salonId: membership.salonId, otp });
     
     // Send email
@@ -197,7 +198,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
     return res.json({
       requireOtp: true,
       tempToken,
-      otp: process.env.NODE_ENV === "development" ? otp : undefined
+      otp
     });
   }
 
@@ -248,6 +249,7 @@ authRouter.post("/resend-otp", async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`\n🔑 [RESEND OTP] User: ${user.email} | OTP: ${otp}\n`);
     const newTempToken = signTempToken({ userId: decoded.userId, salonId: decoded.salonId, otp });
 
     await sendMail({
@@ -264,7 +266,7 @@ authRouter.post("/resend-otp", async (req, res) => {
 
     res.json({
       tempToken: newTempToken,
-      otp: process.env.NODE_ENV === "development" ? otp : undefined
+      otp
     });
   } catch (err) {
     res.status(401).json({ message: "Invalid or expired token" });
