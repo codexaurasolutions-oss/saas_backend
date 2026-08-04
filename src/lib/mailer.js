@@ -52,23 +52,17 @@ const createTransporter = () => {
       });
     }
 
-    const port = Number(process.env.SMTP_PORT);
-    const secure = port === 465 || String(process.env.SMTP_SECURE || "false") === "true";
-
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port,
-      secure,
+      port: Number(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === "true",
       connectionTimeout: CONNECTION_TIMEOUT_MS,
       greetingTimeout: CONNECTION_TIMEOUT_MS,
       socketTimeout: SEND_TIMEOUT_MS,
-      auth: process.env.SMTP_USER
-        ? {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS || ""
-          }
-        : undefined,
-      tls: { rejectUnauthorized: false }
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
     });
   }
 
