@@ -33,6 +33,25 @@ const createTransporter = () => {
       });
     }
 
+    const isZoho = (process.env.SMTP_HOST || "").toLowerCase().includes("zoho");
+    if (isZoho) {
+      return nodemailer.createTransport({
+        host: "smtppro.zoho.in", // Pro server is generally unblocked and more stable for Cloud IPs
+        port: 465, // Force secure SSL port
+        secure: true, // Force implicit TLS
+        connectionTimeout: 20000, // Extend timeout for Railway cold starts
+        greetingTimeout: 20000,
+        socketTimeout: SEND_TIMEOUT_MS,
+        auth: process.env.SMTP_USER
+          ? {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS || ""
+            }
+          : undefined,
+        tls: { rejectUnauthorized: false }
+      });
+    }
+
     const port = Number(process.env.SMTP_PORT);
     const secure = port === 465 || String(process.env.SMTP_SECURE || "false") === "true";
 
