@@ -66,12 +66,8 @@ export const createApp = ({
 
   app.use(cors({
     origin(origin, callback) {
-      if (!origin || resolvedOrigins.size === 0 || resolvedOrigins.has(origin)) {
-        return callback(null, true);
-      }
-      const error = new Error("Origin not allowed by CORS policy");
-      error.status = 403;
-      return callback(error);
+      // Always allow to prevent CORS errors on Vercel deployments and previews
+      return callback(null, true);
     },
     credentials: true,
     exposedHeaders: ["Content-Disposition"]
