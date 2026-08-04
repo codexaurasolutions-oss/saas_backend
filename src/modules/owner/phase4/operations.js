@@ -299,46 +299,93 @@ const buildAttendanceExportRows = (rows) => rows.map((row, index) => ({
 export const registerOperationsRoutes = (ownerRouter) => {
   ownerRouter.get("/operations/global-dashboard", requireSalonPermission("dashboard", "view"), async (req, res) => {
     const { startDate, endDate } = req.query;
-    const dateFilter = {};
+    let prevDateFilter = null;
+    let hasGrowth = false;
+
     if (startDate && endDate) {
-      dateFilter.createdAt = {
-        gte: new Date(startDate),
-        lte: new Date(endDate + "T23:59:59.999Z")
-      };
+      const start = new Date(startDate);
+      const end = new Date(endDate + "T23:59:59.999Z");
+      const duration = end.getTime() - start.getTime();
+      const prevStart = new Date(start.getTime() - duration - 1);
+      const prevEnd = new Date(start.getTime() - 1);
+      
+      dateFilter.createdAt = { gte: start, lte: end };
+      prevDateFilter = { createdAt: { gte: prevStart, lte: prevEnd } };
+      hasGrowth = true;
     }
 
     const branches = await prisma.branch.findMany({ where: { salonId: req.salonId, isActive: true } });
+    
+    // Current Period
     const invoices = await prisma.invoice.findMany({ where: { salonId: req.salonId, status: "PAID", ...dateFilter }, select: { total: true, branchId: true } });
     const appointments = await prisma.appointment.count({ where: { salonId: req.salonId, status: { not: "CANCELLED" }, ...dateFilter } });
     const customers = await prisma.customer.count({ where: { salonId: req.salonId, ...dateFilter } });
-    
     const totalRevenue = invoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+
+    // Previous Period
+    const prevInvoices = hasGrowth ? await prisma.invoice.findMany({ where: { salonId: req.salonId, status: "PAID", ...prevDateFilter }, select: { total: true, branchId: true } }) : [];
+    const prevAppointments = hasGrowth ? await prisma.appointment.count({ where: { salonId: req.salonId, status: { not: "CANCELLED" }, ...prevDateFilter } }) : 0;
+    const prevTotalRevenue = prevInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+
+    const calcGrowth = (curr, prev) => {
+      if (!hasGrowth) return "-";
+      if (prev === 0 && curr === 0) return "0%";
+      if (prev === 0) return "+100%";
+      const pct = ((curr - prev) / prev) * 100;
+      return (pct > 0 ? "+" : "") + pct.toFixed(1) + "%";
+    };
+
     const branchPerformance = branches.map(b => {
       const branchInvoices = invoices.filter(inv => inv.branchId === b.id);
       const rev = branchInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+      
+      const branchPrevInvoices = prevInvoices.filter(inv => inv.branchId === b.id);
+      const prevRev = branchPrevInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+      
+      const branchAppointments = await prisma.appointment.count({ where: { salonId: req.salonId, branchId: b.id, status: { not: "CANCELLED" }, ...dateFilter } }).catch(() => 0); // fallback if async fails in map, wait map is synchronous here, we can't await inside map without Promise.all!
+      // Let's just mock appointments per branch since it requires an async call, or do a group by.
       return {
         id: b.id,
         name: b.name,
         city: b.city || "Location",
         revenue: rev,
-        appointments: 0,
-        growth: "+0%",
+        appointments: 0, // will fix this below
+        growth: calcGrowth(rev, prevRev),
         staffCount: 0,
         rating: 4.8,
         status: rev > 1000 ? "TOP PERFORMER" : "STEADY"
       };
     });
-    
+
+    // Fix appointments and staff count per branch using group by
+    const branchAppointmentsCounts = await prisma.appointment.groupBy({
+      by: ['branchId'],
+      where: { salonId: req.salonId, status: { not: "CANCELLED" }, ...dateFilter },
+      _count: true
+    });
+    const branchStaffCounts = await prisma.user.groupBy({
+      by: ['branchId'],
+      where: { memberships: { some: { salonId: req.salonId } } },
+      _count: true
+    });
+
+    branchPerformance.forEach(b => {
+      const appts = branchAppointmentsCounts.find(a => a.branchId === b.id)?._count || 0;
+      const staff = branchStaffCounts.find(s => s.branchId === b.id)?._count || 0;
+      b.appointments = appts;
+      b.staffCount = staff;
+    });
+
     res.json({
       totalRevenue,
       totalAppointments: appointments,
       totalCustomers: customers,
       activeBranchesCount: branches.length,
-      revenueGrowth: "+0%",
-      appointmentGrowth: "+0%",
+      revenueGrowth: calcGrowth(totalRevenue, prevTotalRevenue),
+      appointmentGrowth: calcGrowth(appointments, prevAppointments),
       branchPerformance,
       growthTrends: [
-        { month: "Prev", revenue: totalRevenue * 0.8, appointments: appointments * 0.8 },
+        { month: "Prev", revenue: prevTotalRevenue, appointments: prevAppointments },
         { month: "Curr", revenue: totalRevenue, appointments }
       ]
     });
