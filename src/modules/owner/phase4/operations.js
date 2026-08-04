@@ -363,9 +363,9 @@ export const registerOperationsRoutes = (ownerRouter) => {
       where: { salonId: req.salonId, status: { not: "CANCELLED" }, ...dateFilter },
       _count: true
     });
-    const branchStaffCounts = await prisma.user.groupBy({
+    const branchStaffCounts = await prisma.userSalon.groupBy({
       by: ['branchId'],
-      where: { memberships: { some: { salonId: req.salonId } } },
+      where: { salonId: req.salonId, isArchived: false, branchId: { not: null } },
       _count: true
     });
 
