@@ -1,68 +1,94 @@
 import nodemailer from "nodemailer";
 
-let transporter = null;
+let transporter;
 
-const CONNECTION_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 30000);
-const SEND_TIMEOUT_MS = 30000;
+const CONNECTION_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 5000);
+const SEND_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 2;
 
 const smtpConfigured = () =>
-  !!(
-    process.env.SMTP_HOST &&
-    process.env.SMTP_PORT &&
-    process.env.SMTP_USER &&
-    process.env.SMTP_PASS &&
-    process.env.SMTP_FROM
-  );
+  Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
 
 const createTransporter = () => {
-  if (!smtpConfigured()) {
-    console.warn("[mailer] SMTP is not configured.");
+  if (smtpConfigured()) {
+    const isGmail = (process.env.SMTP_HOST || "").toLowerCase().includes("gmail") || 
+                    (process.env.SMTP_SERVICE || "").toLowerCase() === "gmail";
+
+    if (isGmail) {
+      return nodemailer.createTransport({
+        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        connectionTimeout: CONNECTION_TIMEOUT_MS,
+        greetingTimeout: CONNECTION_TIMEOUT_MS,
+        socketTimeout: SEND_TIMEOUT_MS,
+        auth: process.env.SMTP_USER
+          ? {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS || ""
+            }
+          : undefined,
+        tls: { rejectUnauthorized: false }
+      });
+    }
+
+    const isZoho = (process.env.SMTP_HOST || "").toLowerCase().includes("zoho");
+    if (isZoho) {
+      return nodemailer.createTransport({
+        host: "smtppro.zoho.in",
+        port: 465,
+        secure: true,
+        connectionTimeout: 20000,
+        greetingTimeout: 20000,
+        socketTimeout: SEND_TIMEOUT_MS,
+        auth: process.env.SMTP_USER
+          ? {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS || ""
+            }
+          : undefined,
+        tls: { rejectUnauthorized: false }
+      });
+    }
+
     return nodemailer.createTransport({
-      jsonTransport: true,
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === "true",
+      connectionTimeout: CONNECTION_TIMEOUT_MS,
+      greetingTimeout: CONNECTION_TIMEOUT_MS,
+      socketTimeout: SEND_TIMEOUT_MS,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
     });
   }
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
-    secure: String(process.env.SMTP_SECURE) === "true",
-
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-
-    connectionTimeout: CONNECTION_TIMEOUT_MS,
-    greetingTimeout: CONNECTION_TIMEOUT_MS,
-    socketTimeout: SEND_TIMEOUT_MS,
+  return nodemailer.createTransport({
+    jsonTransport: true
   });
-
-  return transporter;
 };
 
 export const getMailer = () => {
-  if (!transporter) {
-    transporter = createTransporter();
-  }
+  if (!transporter) transporter = createTransporter();
   return transporter;
 };
 
-export const verifyMailer = async () => {
-  try {
-    await getMailer().verify();
-    console.log("✅ SMTP Connected Successfully");
-    return true;
-  } catch (err) {
-    console.error("❌ SMTP Verify Failed");
-    console.error(err);
-    return false;
-  }
-};
+export const mailerMode = () => (smtpConfigured() ? "smtp" : "json");
+export const mailerStatus = () => ({
+  mode: mailerMode(),
+  smtpConfigured: smtpConfigured(),
+  host: process.env.SMTP_HOST || null,
+  port: process.env.SMTP_PORT || null,
+  from: process.env.SMTP_FROM || null,
+  user: process.env.SMTP_USER || null,
+  timeout: CONNECTION_TIMEOUT_MS
+});
 
 const stripHtml = (html) => {
   if (!html) return "";
-
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -73,52 +99,59 @@ const stripHtml = (html) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const pendingEmails = [];
+
+export const getPendingEmails = () => pendingEmails;
+
+export const retryPendingEmails = async () => {
+  if (pendingEmails.length === 0) return;
+  const batch = [...pendingEmails];
+  pendingEmails.length = 0;
+  let sent = 0;
+  for (const job of batch) {
+    try {
+      await sendMail(job);
+      sent++;
+    } catch {
+      pendingEmails.push(job);
+    }
+  }
+  console.log(`[mailer] Retry batch: ${sent}/${batch.length} sent, ${pendingEmails.length} still pending`);
+};
+
 export const sendMail = async (options) => {
   if (!smtpConfigured()) {
-    console.log("[mailer] SMTP not configured.");
-    return;
+    console.log(`[mailer] SMTP not configured, email logged for ${options.to}: ${options.subject || "(no subject)"}`);
+    return { mode: "json", messageId: null, preview: "SMTP not configured" };
   }
 
   let lastError;
-
-  for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const info = await getMailer().sendMail({
-        from: process.env.SMTP_FROM,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text || stripHtml(options.html),
-        attachments: options.attachments || [],
+      const mail = await getMailer().sendMail({
+        from: process.env.SMTP_FROM || '"SalonNest" <govardhan@salonnest.in>',
+        ...options,
+        text: options.text || stripHtml(options.html || ""),
+        attachments: options.attachments || []
       });
 
-      console.log("✅ Email Sent:", info.messageId);
-
-      return info;
+      if (attempt > 0) console.log(`[mailer] Email sent on attempt ${attempt + 1} to ${options.to}`);
+      return {
+        mode: mailerMode(),
+        messageId: mail.messageId || null,
+        preview: typeof mail.message === "string" ? mail.message : null
+      };
     } catch (err) {
       lastError = err;
-
-      console.error(
-        `[mailer] Attempt ${attempt}/${MAX_RETRIES + 1} failed`
-      );
-
-      console.error(err);
-
-      transporter = null;
-
-      if (attempt <= MAX_RETRIES) {
-        await sleep(2000);
+      console.error(`[mailer] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed for ${options.to}: ${err.message}`);
+      if (attempt < MAX_RETRIES) {
+        transporter = null;
+        await sleep(2000 * (attempt + 1));
       }
     }
   }
 
-  throw lastError;
+  console.error(`[mailer] All ${MAX_RETRIES + 1} attempts failed for ${options.to}. Queuing for retry.`);
+  pendingEmails.push({ ...options, _queuedAt: Date.now() });
+  return { mode: mailerMode(), messageId: null, queued: true };
 };
-
-export const mailerStatus = () => ({
-  configured: smtpConfigured(),
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  user: process.env.SMTP_USER,
-  from: process.env.SMTP_FROM,
-});
