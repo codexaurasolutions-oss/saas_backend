@@ -299,6 +299,7 @@ const buildAttendanceExportRows = (rows) => rows.map((row, index) => ({
 export const registerOperationsRoutes = (ownerRouter) => {
   ownerRouter.get("/operations/global-dashboard", requireSalonPermission("dashboard", "view"), async (req, res) => {
     const { startDate, endDate } = req.query;
+    let dateFilter = {};
     let prevDateFilter = null;
     let hasGrowth = false;
 
@@ -309,7 +310,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
       const prevStart = new Date(start.getTime() - duration - 1);
       const prevEnd = new Date(start.getTime() - 1);
       
-      dateFilter.createdAt = { gte: start, lte: end };
+      dateFilter = { createdAt: { gte: start, lte: end } };
       prevDateFilter = { createdAt: { gte: prevStart, lte: prevEnd } };
       hasGrowth = true;
     }
