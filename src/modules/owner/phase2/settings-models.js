@@ -12,7 +12,7 @@ const ensureArray = (value) => {
 
 export const registerSettingsModelRoutes = (ownerRouter) => {
   // ============ SHIFT MANAGEMENT ============
-  ownerRouter.get("/shifts", requireFeatureEnabled("inventory"), requireSalonPermission("settings", "view"), async (req, res) => {
+  ownerRouter.get("/shifts", requireSalonPermission("settings", "view"), async (req, res) => {
     const branchId = req.query.branchId ? String(req.query.branchId) : null;
     const shifts = await prisma.shift.findMany({
       where: { salonId: req.salonId, ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) },
@@ -22,7 +22,7 @@ export const registerSettingsModelRoutes = (ownerRouter) => {
     res.json(shifts);
   });
 
-  ownerRouter.post("/shifts", requireFeatureEnabled("inventory"), requireSalonPermission("settings", "edit"), async (req, res) => {
+  ownerRouter.post("/shifts", requireSalonPermission("settings", "edit"), async (req, res) => {
     const { name, active = true, sameForAllDays = true, startTime, endTime, breakLabel, sortOrder = 0, days = [], breaks = [] } = req.body;
     if (!name) return res.status(400).json({ message: "name is required" });
     const branchId = req.user.salonRole !== "SALON_OWNER" && req.user.branchId ? req.user.branchId : (req.body.branchId || null);
@@ -47,7 +47,7 @@ export const registerSettingsModelRoutes = (ownerRouter) => {
     res.status(201).json(shift);
   });
 
-  ownerRouter.patch("/shifts/:id", requireFeatureEnabled("inventory"), requireSalonPermission("settings", "edit"), async (req, res) => {
+  ownerRouter.patch("/shifts/:id", requireSalonPermission("settings", "edit"), async (req, res) => {
     const shift = await prisma.shift.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
     if (!shift) return res.status(404).json({ message: "Shift not found" });
     const { name, active, sameForAllDays, startTime, endTime, breakLabel, sortOrder, days, breaks, branchId } = req.body;
@@ -96,7 +96,7 @@ export const registerSettingsModelRoutes = (ownerRouter) => {
     res.json(updated);
   });
 
-  ownerRouter.delete("/shifts/:id", requireFeatureEnabled("inventory"), requireSalonPermission("settings", "edit"), async (req, res) => {
+  ownerRouter.delete("/shifts/:id", requireSalonPermission("settings", "edit"), async (req, res) => {
     const shift = await prisma.shift.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
     if (!shift) return res.status(404).json({ message: "Shift not found" });
     await prisma.shift.delete({ where: { id: shift.id } });
