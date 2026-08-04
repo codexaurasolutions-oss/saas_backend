@@ -36,10 +36,10 @@ const createTransporter = () => {
     const isZoho = (process.env.SMTP_HOST || "").toLowerCase().includes("zoho");
     if (isZoho) {
       return nodemailer.createTransport({
-        host: "smtppro.zoho.in", // Pro server is generally unblocked and more stable for Cloud IPs
-        port: 465, // Force secure SSL port
-        secure: true, // Force implicit TLS
-        connectionTimeout: 20000, // Extend timeout for Railway cold starts
+        host: "smtppro.zoho.in",
+        port: 465,
+        secure: true,
+        connectionTimeout: 20000,
         greetingTimeout: 20000,
         socketTimeout: SEND_TIMEOUT_MS,
         auth: process.env.SMTP_USER
