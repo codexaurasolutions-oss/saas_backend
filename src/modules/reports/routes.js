@@ -75,7 +75,7 @@ const buildInvoiceWhere = (req, branchId) => {
     ...(branchId ? { branchId } : {}),
     ...(itemsFilters.length > 0 ? { items: { some: { AND: itemsFilters } } } : {}),
     ...(customerId ? { customerId } : {}),
-    ...(status ? { status } : {}),
+    ...(status ? { status } : { status: { notIn: ["STARTED", "CANCELLED"] } }),
     ...dateFilter
   };
 };

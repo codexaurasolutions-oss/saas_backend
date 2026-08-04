@@ -42,7 +42,7 @@ export const registerAdvancedReportRoutes = (ownerRouter) => {
   ownerRouter.get("/reports/profit-loss", requireFeatureEnabled("advancedReports"), requireSalonPermission("advancedReports", "view"), async (req, res) => {
     const bs = branchScope(req);
     const [invoices, expenses] = await Promise.all([
-      prisma.invoice.findMany({ where: { salonId: req.salonId, ...bs, status: { not: "CANCELLED" }, ...parseDateWhere(req.query) } }),
+      prisma.invoice.findMany({ where: { salonId: req.salonId, ...bs, status: { notIn: ["CANCELLED", "STARTED"] }, ...parseDateWhere(req.query) } }),
       prisma.expense.findMany({ where: { salonId: req.salonId, ...bs, status: { in: ["APPROVED", "PAID"] }, ...parseDateWhere(req.query, "expenseDate") } })
     ]);
     const revenue = invoices.reduce((sum, row) => sum + toNumber(row.total), 0);
@@ -70,7 +70,7 @@ export const registerAdvancedReportRoutes = (ownerRouter) => {
 
   ownerRouter.get("/reports/tax", requireFeatureEnabled("advancedReports"), requireSalonPermission("advancedReports", "view"), async (req, res) => {
     const bs = branchScope(req);
-    const invoices = await prisma.invoice.findMany({ where: { salonId: req.salonId, ...bs, status: { not: "CANCELLED" }, ...parseDateWhere(req.query) }, orderBy: { createdAt: "desc" } });
+    const invoices = await prisma.invoice.findMany({ where: { salonId: req.salonId, ...bs, status: { notIn: ["CANCELLED", "STARTED"] }, ...parseDateWhere(req.query) }, orderBy: { createdAt: "desc" } });
     res.json({
       taxCollected: invoices.reduce((sum, row) => sum + toNumber(row.tax), 0),
       rows: invoices.map((row) => ({ invoiceNumber: row.invoiceNumber, total: row.total, tax: row.tax, createdAt: row.createdAt }))
@@ -219,7 +219,7 @@ export const registerAdvancedReportRoutes = (ownerRouter) => {
 
     const dateFilter = { gte: start };
     const [invoices, expenses, payments] = await Promise.all([
-      prisma.invoice.findMany({ where: { salonId: req.salonId, ...bs, status: { not: "CANCELLED" }, createdAt: dateFilter } }),
+      prisma.invoice.findMany({ where: { salonId: req.salonId, ...bs, status: { notIn: ["CANCELLED", "STARTED"] }, createdAt: dateFilter } }),
       prisma.expense.findMany({ where: { salonId: req.salonId, ...bs, status: { in: ["APPROVED", "PAID"] }, expenseDate: dateFilter } }),
       prisma.payment.findMany({ where: { salonId: req.salonId, ...bs, createdAt: dateFilter } })
     ]);
