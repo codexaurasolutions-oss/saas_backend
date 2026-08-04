@@ -1468,10 +1468,22 @@ ownerRouter.delete("/custom-roles/:id", requireSalonPermission("staff", "edit"),
   res.json({ message: "Custom role deleted" });
 });
 ownerRouter.post("/users", requireSalonPermission("staff", "create"), validate(schemas.ownerUser), async (req, res) => {
+  if (req.user.plan && req.user.plan.userLimit) {
+    const currentStaffCount = await prisma.userSalon.count({ where: { salonId: req.salonId, isArchived: false } });
+    if (currentStaffCount >= req.user.plan.userLimit) {
+      return res.status(403).json({ message: "Staff limit reached for your current plan. Please upgrade your subscription." });
+    }
+  }
   const result = await createLoginUserForSalon(req.salonId, req.body);
   res.status(result.status).json(result.body);
 });
 ownerRouter.post("/staff-users", requireSalonPermission("staff", "create"), validate(schemas.ownerUser), async (req, res) => {
+  if (req.user.plan && req.user.plan.userLimit) {
+    const currentStaffCount = await prisma.userSalon.count({ where: { salonId: req.salonId, isArchived: false } });
+    if (currentStaffCount >= req.user.plan.userLimit) {
+      return res.status(403).json({ message: "Staff limit reached for your current plan. Please upgrade your subscription." });
+    }
+  }
   const result = await createLoginUserForSalon(req.salonId, req.body);
   res.status(result.status).json(result.body);
 });
