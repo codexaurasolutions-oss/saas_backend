@@ -1,5 +1,5 @@
 import { prisma } from "./prisma.js";
-import { attemptCustomerTemplateEmail } from "./emailNotifications.js";
+import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "./emailNotifications.js";
 import { sendMail } from "./mailer.js";
 import { sendSms } from "./smsService.js";
 import { sendWhatsApp } from "./whatsappService.js";
@@ -175,6 +175,16 @@ export const maybeSendFeedbackRequestForAppointment = async ({
     }
   });
 
+  if (appointment.customer?.phone) {
+    await attemptCustomerTemplateWhatsApp({
+      salonId,
+      toPhone: appointment.customer.phone,
+      templateType: "feedback_request_template",
+      context: { appointmentId: appointment.id, customerId: appointment.customerId },
+      customerId: appointment.customerId
+    }).catch(() => {});
+  }
+
   if (!delivery.skipped) {
     await createFeedbackAudit({
       salonId,
@@ -241,6 +251,16 @@ export const maybeSendFeedbackRequestForInvoice = async ({
       customerId: invoice.customerId
     }
   });
+
+  if (invoice.customer?.phone) {
+    await attemptCustomerTemplateWhatsApp({
+      salonId,
+      toPhone: invoice.customer.phone,
+      templateType: "feedback_request_template",
+      context: { invoiceId: invoice.id, customerId: invoice.customerId },
+      customerId: invoice.customerId
+    }).catch(() => {});
+  }
 
   if (!delivery.skipped) {
     await createFeedbackAudit({
@@ -491,6 +511,21 @@ export const processAppointmentReminderEmails = async () => {
       }
     });
 
+    if (appointment.customer?.phone) {
+      const reminderSettings = await getSalonAutomationSettings(appointment.salonId, appointment.branchId);
+      const whatsappOn = reminderSettings.notificationSettings?.whatsappEnabled !== false;
+      if (whatsappOn) {
+        await attemptCustomerTemplateWhatsApp({
+          salonId: appointment.salonId,
+          toPhone: appointment.customer.phone,
+          templateType: "appointment_reminder",
+          context: { appointmentId: appointment.id, customerId: appointment.customerId },
+          customerId: appointment.customerId,
+          branchId: appointment.branchId
+        }).catch(() => {});
+      }
+    }
+
     if (!delivery.skipped) {
       await createReminderLog(
         appointment.id,
@@ -520,7 +555,7 @@ export const processLifecycleNotifications = async () => {
   }).then((rows) => rows.map((r) => r.salonId));
 
   for (const salonId of salonIds) {
-    const { isOn, emailEnabled, smsEnabled } = await getNotificationToggles(salonId).catch(() => ({ isOn: () => false, emailEnabled: false, smsEnabled: false }));
+    const { isOn, emailEnabled, smsEnabled, whatsappEnabled } = await getNotificationToggles(salonId).catch(() => ({ isOn: () => false, emailEnabled: false, smsEnabled: false, whatsappEnabled: false }));
 
     // ── Birthday Offer ────────────────────────────────────────────────────────
     if (isOn("birthdayOffer") && (emailEnabled || smsEnabled)) {
@@ -541,6 +576,9 @@ export const processLifecycleNotifications = async () => {
         }
         if (smsEnabled && customer.phone) {
           await sendSms({ salonId, to: customer.phone, message: `Happy Birthday ${customer.name}! Wishing you a wonderful birthday! Visit us for a special offer.` }).catch(() => {});
+        }
+        if (whatsappEnabled && customer.phone) {
+          await attemptCustomerTemplateWhatsApp({ salonId, toPhone: customer.phone, templateType: "birthday_offer_template", context: { customerId: customer.id }, customerId: customer.id }).catch(() => {});
         }
         await createCustomerNotification({ salonId, customerId: customer.id, title: "🎂 Happy Birthday!", message: "Wishing you a wonderful birthday! A special offer awaits you." }).catch(() => {});
         await createAuditLog({ salonId, module: "LIFECYCLE", action: "BIRTHDAY_EMAIL_SENT", entityType: "Customer", entityId: customer.id, summary: "Birthday offer email sent" }).catch(() => {});
@@ -568,6 +606,9 @@ export const processLifecycleNotifications = async () => {
         if (smsEnabled && customer.phone) {
           await sendSms({ salonId, to: customer.phone, message: `Happy Anniversary ${customer.name}! Wishing you a beautiful anniversary! Enjoy a special offer today.` }).catch(() => {});
         }
+        if (whatsappEnabled && customer.phone) {
+          await attemptCustomerTemplateWhatsApp({ salonId, toPhone: customer.phone, templateType: "anniversary_offer_template", context: { customerId: customer.id }, customerId: customer.id }).catch(() => {});
+        }
         await createCustomerNotification({ salonId, customerId: customer.id, title: "💍 Happy Anniversary!", message: "Wishing you a beautiful anniversary! Enjoy a special offer today." }).catch(() => {});
         await createAuditLog({ salonId, module: "LIFECYCLE", action: "ANNIVERSARY_EMAIL_SENT", entityType: "Customer", entityId: customer.id, summary: "Anniversary offer email sent" }).catch(() => {});
         results.anniversary++;
@@ -592,6 +633,9 @@ export const processLifecycleNotifications = async () => {
         }
         if (smsEnabled && txn.customer?.phone) {
           await sendSms({ salonId, to: txn.customer.phone, message: `Your loyalty points expire in 7 days. Redeem them now before they expire!` }).catch(() => {});
+        }
+        if (whatsappEnabled && txn.customer?.phone) {
+          await attemptCustomerTemplateWhatsApp({ salonId, toPhone: txn.customer.phone, templateType: "loyalty_expiry_template", context: { customerId: txn.customerId }, customerId: txn.customerId }).catch(() => {});
         }
         await createCustomerNotification({ salonId, customerId: txn.customerId, title: "⚠️ Loyalty Points Expiring", message: `Your loyalty points expire in 7 days. Redeem them now!` }).catch(() => {});
         await createAuditLog({ salonId, module: "LIFECYCLE", action: "LOYALTY_EXPIRY_SENT", entityType: "LoyaltyTransaction", entityId: txn.id, summary: "Loyalty expiry reminder sent" }).catch(() => {});
@@ -618,6 +662,9 @@ export const processLifecycleNotifications = async () => {
         if (smsEnabled && mem.customer?.phone) {
           await sendSms({ salonId, to: mem.customer.phone, message: `Your "${mem.membershipPlan?.name || 'membership'}" expires in 3 days. Renew now to continue enjoying benefits!` }).catch(() => {});
         }
+        if (whatsappEnabled && mem.customer?.phone) {
+          await attemptCustomerTemplateWhatsApp({ salonId, toPhone: mem.customer.phone, templateType: "membership_expiry_template", context: { customerId: mem.customerId, customerMembershipId: mem.id }, customerId: mem.customerId }).catch(() => {});
+        }
         await createCustomerNotification({ salonId, customerId: mem.customerId, title: "⚠️ Membership Expiring Soon", message: `Your "${mem.membershipPlan?.name || 'membership'}" expires in 3 days. Renew now!` }).catch(() => {});
         await createAuditLog({ salonId, module: "LIFECYCLE", action: "MEMBERSHIP_EXPIRY_SENT", entityType: "CustomerMembership", entityId: mem.id, summary: "Membership expiry reminder sent" }).catch(() => {});
         results.membershipExpiry++;
@@ -642,6 +689,9 @@ export const processLifecycleNotifications = async () => {
         }
         if (smsEnabled && pkg.customer?.phone) {
           await sendSms({ salonId, to: pkg.customer.phone, message: `Your "${pkg.package?.name || 'package'}" expires in 3 days. Renew now to continue enjoying benefits!` }).catch(() => {});
+        }
+        if (whatsappEnabled && pkg.customer?.phone) {
+          await attemptCustomerTemplateWhatsApp({ salonId, toPhone: pkg.customer.phone, templateType: "package_expiry_template", context: { customerId: pkg.customerId, customerPackageId: pkg.id }, customerId: pkg.customerId }).catch(() => {});
         }
         await createCustomerNotification({ salonId, customerId: pkg.customerId, title: "⚠️ Package Expiring Soon", message: `Your "${pkg.package?.name || 'package'}" expires in 3 days.` }).catch(() => {});
         await createAuditLog({ salonId, module: "LIFECYCLE", action: "PACKAGE_EXPIRY_SENT", entityType: "CustomerPackage", entityId: pkg.id, summary: "Package expiry reminder sent" }).catch(() => {});
@@ -668,6 +718,9 @@ export const processLifecycleNotifications = async () => {
         }
         if (smsEnabled && customer?.phone) {
           await sendSms({ salonId, to: customer.phone, message: `Your gift card (${gc.code || gc.id}) expires in 7 days. Use it before it expires!` }).catch(() => {});
+        }
+        if (whatsappEnabled && customer?.phone) {
+          await attemptCustomerTemplateWhatsApp({ salonId, toPhone: customer.phone, templateType: "gift_card_expiry_template", context: { customerId: customer.id, giftCardId: gc.id }, customerId: customer.id }).catch(() => {});
         }
         await createCustomerNotification({ salonId, customerId: customer.id, title: "🎁 Gift Card Expiring Soon", message: `Your gift card (${gc.code || gc.id}) expires in 7 days. Use it before it expires!` }).catch(() => {});
         await createAuditLog({ salonId, module: "LIFECYCLE", action: "GIFTCARD_EXPIRY_SENT", entityType: "GiftCard", entityId: gc.id, summary: "Gift card expiry reminder sent" }).catch(() => {});

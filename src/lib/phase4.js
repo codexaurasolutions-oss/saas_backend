@@ -174,6 +174,7 @@ export const recordLoyaltyTransaction = async ({
       });
       const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
       const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+      const whatsappEnabled = setting?.advancedSettings?.notificationSettings?.whatsappEnabled !== false;
       const isReferralTransaction = type === "BONUS" || (note && /refer/i.test(note));
 
       if (toggles.loyaltyEarning !== false) {
@@ -196,6 +197,19 @@ export const recordLoyaltyTransaction = async ({
             }).catch(() => {});
           }
         }
+        if (whatsappEnabled) {
+          const recipient = await prisma.customer.findUnique({ where: { id: customerId }, select: { phone: true } });
+          if (recipient?.phone) {
+            const { attemptCustomerTemplateWhatsApp } = await import("./emailNotifications.js");
+            await attemptCustomerTemplateWhatsApp({
+              salonId,
+              toPhone: recipient.phone,
+              templateType: "loyalty_earning_template",
+              context: { customerId, pointsEarned: points, newBalance: nextBalance },
+              customerId
+            }).catch(() => {});
+          }
+        }
       }
 
       if (isReferralTransaction && toggles.referrerRewardSMS !== false) {
@@ -215,6 +229,19 @@ export const recordLoyaltyTransaction = async ({
               toEmail: recipient.email,
               templateType: "referrer_reward_sms",
               context: { customerId, pointsEarned: points, note: note || "Referral Reward" }
+            }).catch(() => {});
+          }
+        }
+        if (whatsappEnabled) {
+          const recipient = await prisma.customer.findUnique({ where: { id: customerId }, select: { phone: true } });
+          if (recipient?.phone) {
+            const { attemptCustomerTemplateWhatsApp } = await import("./emailNotifications.js");
+            await attemptCustomerTemplateWhatsApp({
+              salonId,
+              toPhone: recipient.phone,
+              templateType: "referrer_reward_sms",
+              context: { customerId, pointsEarned: points, note: note || "Referral Reward" },
+              customerId
             }).catch(() => {});
           }
         }

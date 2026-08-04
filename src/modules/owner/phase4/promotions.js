@@ -224,6 +224,7 @@ export const registerPromotionRoutes = (ownerRouter) => {
         const setting = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
         const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
         const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+        const whatsappEnabled = setting?.advancedSettings?.notificationSettings?.whatsappEnabled !== false;
 
         if (toggles.giftCard !== false) {
           await prisma.customerNotification.create({
@@ -244,6 +245,19 @@ export const registerPromotionRoutes = (ownerRouter) => {
                 toEmail: recipient.email,
                 templateType: "gift_card_issued",
                 context: { customerId: row.issuedToCustomerId, giftCardCode: row.code, giftCardAmount: row.balanceAmount }
+              }).catch(() => {});
+            }
+          }
+          if (whatsappEnabled) {
+            const recipient = await prisma.customer.findUnique({ where: { id: row.issuedToCustomerId }, select: { phone: true } });
+            if (recipient?.phone) {
+              const { attemptCustomerTemplateWhatsApp } = await import("../../../lib/emailNotifications.js");
+              await attemptCustomerTemplateWhatsApp({
+                salonId: req.salonId,
+                toPhone: recipient.phone,
+                templateType: "gift_card_issued",
+                context: { customerId: row.issuedToCustomerId, giftCardCode: row.code, giftCardAmount: row.balanceAmount },
+                customerId: row.issuedToCustomerId
               }).catch(() => {});
             }
           }
@@ -357,6 +371,7 @@ export const registerPromotionRoutes = (ownerRouter) => {
         const setting = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
         const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
         const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+        const whatsappEnabled = setting?.advancedSettings?.notificationSettings?.whatsappEnabled !== false;
 
         if (toggles.giftCard !== false) {
           await prisma.customerNotification.create({
@@ -382,6 +397,24 @@ export const registerPromotionRoutes = (ownerRouter) => {
                   amountUsed: req.body.amountUsed,
                   balanceAmount: result.updated.balanceAmount
                 }
+              }).catch(() => {});
+            }
+          }
+          if (whatsappEnabled) {
+            const recipient = await prisma.customer.findUnique({ where: { id: result.redemption.customerId }, select: { phone: true } });
+            if (recipient?.phone) {
+              const { attemptCustomerTemplateWhatsApp } = await import("../../../lib/emailNotifications.js");
+              await attemptCustomerTemplateWhatsApp({
+                salonId: req.salonId,
+                toPhone: recipient.phone,
+                templateType: "gift_card_redeemed_template",
+                context: {
+                  customerId: result.redemption.customerId,
+                  giftCardCode: result.updated.code,
+                  amountUsed: req.body.amountUsed,
+                  balanceAmount: result.updated.balanceAmount
+                },
+                customerId: result.redemption.customerId
               }).catch(() => {});
             }
           }

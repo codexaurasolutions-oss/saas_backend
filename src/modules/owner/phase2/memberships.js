@@ -231,11 +231,12 @@ export const registerMembershipRoutes = (ownerRouter) => {
       const setting = await prisma.salonSetting.findFirst({ where: { salonId: req.salonId, branchId: null } });
       const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
       const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+      const whatsappEnabled = setting?.advancedSettings?.notificationSettings?.whatsappEnabled !== false;
 
       if (toggles.membershipRenewal !== false) {
         const customer = await prisma.customer.findUnique({
           where: { id: membership.customerId },
-          select: { email: true, name: true }
+          select: { email: true, name: true, phone: true }
         });
 
         await prisma.customerNotification.create({
@@ -257,6 +258,20 @@ export const registerMembershipRoutes = (ownerRouter) => {
               customerId: membership.customerId,
               customerMembershipId: membership.id
             }
+          }).catch(() => {});
+        }
+        // Membership renewal WhatsApp
+        if (whatsappEnabled && customer?.phone) {
+          const { attemptCustomerTemplateWhatsApp } = await import("../../../lib/emailNotifications.js");
+          await attemptCustomerTemplateWhatsApp({
+            salonId: req.salonId,
+            toPhone: customer.phone,
+            templateType: "membership_renewal_template",
+            context: {
+              customerId: membership.customerId,
+              customerMembershipId: membership.id
+            },
+            customerId: membership.customerId
           }).catch(() => {});
         }
       }

@@ -1,6 +1,6 @@
 import { prisma } from "../../../lib/prisma.js";
 import { getNotificationToggles } from "../../../lib/emailAutomation.js";
-import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
+import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "../../../lib/emailNotifications.js";
 import { convertOrderToInvoice, createOnlineOrder, reverseOrderStock } from "../../../lib/phase3.js";
 import { createCustomerNotification, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
@@ -108,12 +108,12 @@ export const registerEcommerceRoutes = (ownerRouter) => {
       });
 
       // Customer in-app notification — gated by toggle
-      const { isOn, emailEnabled } = await getNotificationToggles(req.salonId).catch(() => ({ isOn: () => true, emailEnabled: true }));
+      const { isOn, emailEnabled, whatsappEnabled } = await getNotificationToggles(req.salonId).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
       const toggleKey = req.body.status === "CONFIRMED" ? "orderConfirmed"
         : req.body.status === "CANCELLED" ? "orderRejected"
         : "messageForOrders";
       const customer = row.customerId
-        ? await tx.customer.findUnique({ where: { id: row.customerId }, select: { email: true } })
+        ? await tx.customer.findUnique({ where: { id: row.customerId }, select: { email: true, phone: true } })
         : null;
 
       if (row.customerId && isOn("messageForOrders") && isOn(toggleKey)) {
@@ -156,6 +156,15 @@ export const registerEcommerceRoutes = (ownerRouter) => {
             context: { invoiceId: order.invoiceId, customerId: row.customerId }
           }).catch(() => {});
         }
+        if (whatsappEnabled && customer?.phone) {
+          await attemptCustomerTemplateWhatsApp({
+            salonId: req.salonId,
+            toPhone: customer.phone,
+            templateType: "invoice_template",
+            context: { invoiceId: order.invoiceId, customerId: row.customerId },
+            customerId: row.customerId
+          }).catch(() => {});
+        }
       }
 
       if (row.customerId && req.body.status === "COMPLETED" && isOn("messageForOrders") && isOn("orderFeedbackLink")) {
@@ -172,6 +181,15 @@ export const registerEcommerceRoutes = (ownerRouter) => {
             toEmail: customer.email,
             templateType: "feedback_request_template",
             context: { customerId: row.customerId }
+          }).catch(() => {});
+        }
+        if (whatsappEnabled && customer?.phone) {
+          await attemptCustomerTemplateWhatsApp({
+            salonId: req.salonId,
+            toPhone: customer.phone,
+            templateType: "feedback_request_template",
+            context: { customerId: row.customerId },
+            customerId: row.customerId
           }).catch(() => {});
         }
       }
@@ -229,7 +247,7 @@ export const registerEcommerceRoutes = (ownerRouter) => {
   });
   ownerRouter.post("/orders/:id/convert-to-invoice", requireFeatureEnabled("onlineOrders"), requireSalonPermission("orders", "edit"), async (req, res) => {
     const invoice = await convertOrderToInvoice({ salonId: req.salonId, orderId: req.params.id, actorUser: req.user });
-    const { isOn, emailEnabled } = await getNotificationToggles(req.salonId, invoice.branchId || null).catch(() => ({ isOn: () => true, emailEnabled: true }));
+    const { isOn, emailEnabled, whatsappEnabled } = await getNotificationToggles(req.salonId, invoice.branchId || null).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
     if (invoice.customerId && isOn("messageForOrders") && isOn("orderInvoiceLink")) {
       await createCustomerNotification({
         salonId: req.salonId,
@@ -244,6 +262,16 @@ export const registerEcommerceRoutes = (ownerRouter) => {
           toEmail: invoice.customer.email,
           templateType: "invoice_template",
           context: { invoiceId: invoice.id, customerId: invoice.customerId }
+        }).catch(() => {});
+      }
+      if (whatsappEnabled && invoice.customer?.phone) {
+        await attemptCustomerTemplateWhatsApp({
+          salonId: req.salonId,
+          toPhone: invoice.customer.phone,
+          templateType: "invoice_template",
+          context: { invoiceId: invoice.id, customerId: invoice.customerId },
+          customerId: invoice.customerId,
+          branchId: invoice.branchId
         }).catch(() => {});
       }
     }

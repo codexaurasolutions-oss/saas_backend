@@ -1,5 +1,5 @@
 import { prisma } from "../../../lib/prisma.js";
-import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
+import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "../../../lib/emailNotifications.js";
 import { createAuditLog, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -141,6 +141,16 @@ export const registerFeedbackRoutes = (ownerRouter) => {
         customerId: row.customerId,
         customer_name: row.customer?.name || "Customer"
       }
+    }).catch(() => {});
+    await attemptCustomerTemplateWhatsApp({
+      salonId: req.salonId,
+      toPhone: row.customer?.phone || "",
+      templateType: "feedback_follow_up",
+      context: {
+        customerId: row.customerId,
+        customer_name: row.customer?.name || "Customer"
+      },
+      customerId: row.customerId
     }).catch(() => {});
     await createAuditLog({
       salonId: req.salonId,

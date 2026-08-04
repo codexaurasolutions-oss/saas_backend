@@ -1,5 +1,5 @@
 import { prisma } from "../../../lib/prisma.js";
-import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
+import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "../../../lib/emailNotifications.js";
 import { createAuditLog, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -174,6 +174,17 @@ export const registerEnquiryRoutes = (ownerRouter) => {
           salon_name: "Skillify ERP"
         }
       });
+    }
+    if (enquiry.phone) {
+      await attemptCustomerTemplateWhatsApp({
+        salonId: req.salonId,
+        toPhone: enquiry.phone,
+        templateType: "enquiry_follow_up",
+        context: {
+          customer_name: enquiry.name,
+          salon_name: "Skillify ERP"
+        }
+      }).catch(() => {});
     }
     res.status(201).json(row);
   });

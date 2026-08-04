@@ -1033,6 +1033,7 @@ ownerRouter.post("/customers", requireSalonPermission("customers", "create"), va
     });
     const toggles = setting?.advancedSettings?.notificationSettings?.toggles || {};
     const emailEnabled = setting?.advancedSettings?.notificationSettings?.emailEnabled !== false;
+    const whatsappEnabled = setting?.advancedSettings?.notificationSettings?.whatsappEnabled !== false;
 
     if (toggles.referralCodeSMS !== false) {
       const namePart = (customer.name || "GUEST").trim().split(" ")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -1055,6 +1056,16 @@ ownerRouter.post("/customers", requireSalonPermission("customers", "create"), va
           toEmail: customer.email,
           templateType: "referral_code_sms",
           context: { customerId: customer.id, referralCode }
+        }).catch(() => {});
+      }
+      if (whatsappEnabled && customer.phone) {
+        const { attemptCustomerTemplateWhatsApp } = await import("../../lib/emailNotifications.js");
+        await attemptCustomerTemplateWhatsApp({
+          salonId: req.salonId,
+          toPhone: customer.phone,
+          templateType: "referral_code_sms",
+          context: { customerId: customer.id, referralCode },
+          customerId: customer.id
         }).catch(() => {});
       }
     }

@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "../../../lib/prisma.js";
 import { getNotificationToggles, maybeSendFeedbackRequestForAppointment } from "../../../lib/emailAutomation.js";
-import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
+import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "../../../lib/emailNotifications.js";
 import { checkStaffAvailability, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
 import { createCustomerNotification, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
@@ -37,13 +37,14 @@ const dispatchAppointmentEvent = async (salonId, appointmentId, {
     const appointment = await fetchAppointment(salonId, appointmentId);
     if (!appointment) return { skipped: true, reason: "appointment-not-found" };
 
-    const { isOn, emailEnabled } = await getNotificationToggles(salonId, branchId || appointment.branchId);
+    const { isOn, emailEnabled, whatsappEnabled } = await getNotificationToggles(salonId, branchId || appointment.branchId);
 
     // Master switch: if messageForAppointments is OFF, suppress all appointment notifications
     if (!isOn("messageForAppointments") && !forceCustomerEmail && !forceOwnerEmail) return { skipped: true, reason: "messageForAppointments-disabled" };
 
     // 1. Customer email
     const customerEmail = appointment?.customer?.email || "";
+    const customerPhone = appointment?.customer?.phone || "";
     if (!skipCustomerEmail && (forceCustomerEmail || (toggleKey && isOn(toggleKey))) && emailEnabled && customerEmail) {
       await attemptCustomerTemplateEmail({
         salonId,
@@ -51,6 +52,18 @@ const dispatchAppointmentEvent = async (salonId, appointmentId, {
         templateType,
         context: { appointmentId, customerId: appointment.customerId }
       }).catch((err) => console.error(`[appt-email] ${templateType}:`, err.message));
+    }
+
+    // 1b. Customer WhatsApp
+    if (!skipCustomerEmail && (forceCustomerEmail || (toggleKey && isOn(toggleKey))) && whatsappEnabled && customerPhone) {
+      await attemptCustomerTemplateWhatsApp({
+        salonId,
+        toPhone: customerPhone,
+        templateType,
+        context: { appointmentId, customerId: appointment.customerId },
+        customerId: appointment.customerId,
+        branchId: branchId || appointment.branchId
+      }).catch((err) => console.error(`[appt-whatsapp] ${templateType}:`, err.message));
     }
 
     // 2. Customer in-app notification
@@ -380,7 +393,7 @@ export const registerAppointmentRoutes = (ownerRouter) => {
         if (fullAppt && !fullAppt.convertedInvoiceId) {
           const existingInvoice = await prisma.invoice.findFirst({ where: { appointmentId: appointment.id, salonId: req.salonId, status: "STARTED" } });
           if (!existingInvoice) {
-            const { createInvoiceNumber } = await import("./shared.js");
+            const { createInvoiceNumber } = await import("../../../lib/pos.js");
             const invoiceNumber = await createInvoiceNumber(prisma, req.salonId, appointment.branchId);
             let subtotal = 0;
             let totalTax = 0;
@@ -645,14 +658,24 @@ export const registerAppointmentRoutes = (ownerRouter) => {
       return created;
     });
 
-    if (invoice?.customer?.email) {
-      const { isOn, emailEnabled } = await getNotificationToggles(req.salonId, invoice.branchId).catch(() => ({ isOn: () => true, emailEnabled: true }));
-      if (isOn("advanceReceivedInvoice") && emailEnabled) {
+    if (invoice?.customer?.email || invoice?.customer?.phone) {
+      const { isOn, emailEnabled, whatsappEnabled } = await getNotificationToggles(req.salonId, invoice.branchId).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
+      if (isOn("advanceReceivedInvoice") && emailEnabled && invoice?.customer?.email) {
         void attemptCustomerTemplateEmail({
           salonId: req.salonId,
           toEmail: invoice.customer.email,
           templateType: "invoice_template",
           context: { invoiceId: invoice.id, customerId: invoice.customerId }
+        }).catch(() => {});
+      }
+      if (isOn("advanceReceivedInvoice") && whatsappEnabled && invoice?.customer?.phone) {
+        void attemptCustomerTemplateWhatsApp({
+          salonId: req.salonId,
+          toPhone: invoice.customer.phone,
+          templateType: "invoice_template",
+          context: { invoiceId: invoice.id, customerId: invoice.customerId },
+          customerId: invoice.customerId,
+          branchId: invoice.branchId
         }).catch(() => {});
       }
     }

@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
 import { getNotificationToggles } from "../../../lib/emailAutomation.js";
-import { attemptCustomerTemplateEmail } from "../../../lib/emailNotifications.js";
+import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "../../../lib/emailNotifications.js";
 import { prisma } from "../../../lib/prisma.js";
 import { addInvoicePayment, addInvoiceTip, createPosInvoice, generatePaymentLink, getDayClosingSummary, logPaymentLinkPlaceholder, refundInvoice } from "../../../lib/pos.js";
 import { reverseInvoiceLoyalty, createStaffNotification, createCustomerNotification } from "../../../lib/phase4.js";
@@ -36,9 +36,10 @@ const attachSalonSettings = async (req, res, next) => {
 const sendInvoiceAutomationEmails = async (salonId, invoice) => {
   const customerId = invoice?.customerId || null;
   const toEmail = invoice?.customer?.email || "";
+  const toPhone = invoice?.customer?.phone || "";
   const branchId = invoice?.branchId || null;
 
-  const { isOn, emailEnabled } = await getNotificationToggles(salonId, branchId).catch(() => ({ isOn: () => true, emailEnabled: true }));
+  const { isOn, emailEnabled, whatsappEnabled } = await getNotificationToggles(salonId, branchId).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
 
   // Invoice email (advanceReceivedInvoice toggle)
   if (isOn("advanceReceivedInvoice") && emailEnabled && toEmail) {
@@ -47,6 +48,17 @@ const sendInvoiceAutomationEmails = async (salonId, invoice) => {
       toEmail,
       templateType: "invoice_template",
       context: { invoiceId: invoice?.id, customerId }
+    }).catch(() => {});
+  }
+  // Invoice WhatsApp
+  if (isOn("advanceReceivedInvoice") && whatsappEnabled && toPhone) {
+    await attemptCustomerTemplateWhatsApp({
+      salonId,
+      toPhone,
+      templateType: "invoice_template",
+      context: { invoiceId: invoice?.id, customerId },
+      customerId,
+      branchId
     }).catch(() => {});
   }
 
@@ -99,6 +111,17 @@ const sendInvoiceAutomationEmails = async (salonId, invoice) => {
         context: { invoiceId: invoice?.id, customerId }
       }).catch(() => {});
     }
+    // Feedback WhatsApp
+    if (whatsappEnabled && toPhone && isOn("appointmentFeedbackLink")) {
+      await attemptCustomerTemplateWhatsApp({
+        salonId,
+        toPhone,
+        templateType: "feedback_request_template",
+        context: { invoiceId: invoice?.id, customerId },
+        customerId,
+        branchId
+      }).catch(() => {});
+    }
   }
 
   const [soldMemberships, soldPackages] = await Promise.all([
@@ -125,6 +148,21 @@ const sendInvoiceAutomationEmails = async (salonId, invoice) => {
         }
       }).catch(() => {});
     }
+    // Membership WhatsApp
+    if (isOn("membershipPurchase") && whatsappEnabled && (membership.customer?.phone || toPhone)) {
+      await attemptCustomerTemplateWhatsApp({
+        salonId,
+        toPhone: membership.customer?.phone || toPhone,
+        templateType: "membership_purchase_template",
+        context: {
+          customerId: membership.customerId,
+          customerMembershipId: membership.id,
+          invoiceId: invoice?.id
+        },
+        customerId: membership.customerId,
+        branchId
+      }).catch(() => {});
+    }
     // In-app
     if (isOn("membershipPurchase") && membership.customerId) {
       await createCustomerNotification({
@@ -147,6 +185,21 @@ const sendInvoiceAutomationEmails = async (salonId, invoice) => {
           customerPackageId: customerPackage.id,
           invoiceId: invoice?.id
         }
+      }).catch(() => {});
+    }
+    // Package WhatsApp
+    if (isOn("packagePurchase") && whatsappEnabled && (customerPackage.customer?.phone || toPhone)) {
+      await attemptCustomerTemplateWhatsApp({
+        salonId,
+        toPhone: customerPackage.customer?.phone || toPhone,
+        templateType: "package_purchase_template",
+        context: {
+          customerId: customerPackage.customerId,
+          customerPackageId: customerPackage.id,
+          invoiceId: invoice?.id
+        },
+        customerId: customerPackage.customerId,
+        branchId
       }).catch(() => {});
     }
     // In-app
@@ -950,6 +1003,14 @@ export const registerBillingRoutes = (ownerRouter) => {
       templateType: "invoice_cancel_template",
       context: { invoiceId: invoice.id, customerId: invoice.customerId }
     }).catch(() => {});
+    await attemptCustomerTemplateWhatsApp({
+      salonId: req.salonId,
+      toPhone: invoice.customer?.phone || "",
+      templateType: "invoice_cancel_template",
+      context: { invoiceId: invoice.id, customerId: invoice.customerId },
+      customerId: invoice.customerId,
+      branchId: invoice.branchId
+    }).catch(() => {});
     res.json({ message: "Invoice cancelled and loyalty points reversed" });
   });
 
@@ -1060,6 +1121,14 @@ export const registerBillingRoutes = (ownerRouter) => {
         templateType: "invoice_template",
         context: { invoiceId: invoice.id, customerId: invoice.customerId }
       }).catch(() => {});
+      await attemptCustomerTemplateWhatsApp({
+        salonId: req.salonId,
+        toPhone: invoice.customer?.phone || "",
+        templateType: "invoice_template",
+        context: { invoiceId: invoice.id, customerId: invoice.customerId },
+        customerId: invoice.customerId,
+        branchId: invoice.branchId
+      }).catch(() => {});
 
       res.json(finalInvoice);
     } catch (error) {
@@ -1101,6 +1170,14 @@ export const registerBillingRoutes = (ownerRouter) => {
       templateType: "payment_receipt_template",
       context: { invoiceId: invoice?.id, customerId: invoice?.customerId }
     }).catch(() => {});
+    await attemptCustomerTemplateWhatsApp({
+      salonId: req.salonId,
+      toPhone: invoice?.customer?.phone || "",
+      templateType: "payment_receipt_template",
+      context: { invoiceId: invoice?.id, customerId: invoice?.customerId },
+      customerId: invoice?.customerId,
+      branchId: invoice?.branchId
+    }).catch(() => {});
     res.status(201).json(payment);
   });
 
@@ -1117,6 +1194,14 @@ export const registerBillingRoutes = (ownerRouter) => {
       toEmail: invoice?.customer?.email || "",
       templateType: "invoice_refund_template",
       context: { invoiceId: invoice?.id, customerId: invoice?.customerId }
+    }).catch(() => {});
+    await attemptCustomerTemplateWhatsApp({
+      salonId: req.salonId,
+      toPhone: invoice?.customer?.phone || "",
+      templateType: "invoice_refund_template",
+      context: { invoiceId: invoice?.id, customerId: invoice?.customerId },
+      customerId: invoice?.customerId,
+      branchId: invoice?.branchId
     }).catch(() => {});
     res.json(invoice);
   });
@@ -1203,6 +1288,14 @@ export const registerBillingRoutes = (ownerRouter) => {
       toEmail: invoice.customer?.email || "",
       templateType: "invoice_template",
       context: { invoiceId: invoice.id, customerId: invoice.customerId }
+    }).catch(() => {});
+    await attemptCustomerTemplateWhatsApp({
+      salonId: req.salonId,
+      toPhone: invoice.customer?.phone || "",
+      templateType: "invoice_template",
+      context: { invoiceId: invoice.id, customerId: invoice.customerId },
+      customerId: invoice.customerId,
+      branchId: invoice.branchId
     }).catch(() => {});
     res.status(201).json({
       invoiceId: updated.id,

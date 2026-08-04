@@ -1,5 +1,6 @@
 import { sendMail } from "./mailer.js";
 import { prisma } from "./prisma.js";
+import { attemptCustomerTemplateWhatsApp } from "./emailNotifications.js";
 
 /**
  * Builds a beautiful HTML email for order confirmation.
@@ -218,6 +219,16 @@ export const sendOrderConfirmationEmail = async ({ order, salonId }) => {
       subject: `✅ Order Confirmed – #${order.orderNumber} | ${salon.name}`,
       html,
     });
+
+    if (order.customerPhone) {
+      await attemptCustomerTemplateWhatsApp({
+        salonId,
+        toPhone: order.customerPhone,
+        templateType: "order_confirmation",
+        context: { orderId: order.id, customerId: order.customerId, orderNumber: order.orderNumber },
+        customerId: order.customerId
+      }).catch(() => {});
+    }
 
     console.log(`[orderEmail] Confirmation sent to ${order.customerEmail} for order ${order.orderNumber}`);
     return { sent: true, ...result };
