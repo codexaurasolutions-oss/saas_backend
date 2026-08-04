@@ -342,7 +342,7 @@ export const registerOperationsRoutes = (ownerRouter) => {
       const branchPrevInvoices = prevInvoices.filter(inv => inv.branchId === b.id);
       const prevRev = branchPrevInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
       
-      const branchAppointments = await prisma.appointment.count({ where: { salonId: req.salonId, branchId: b.id, status: { not: "CANCELLED" }, ...dateFilter } }).catch(() => 0); // fallback if async fails in map, wait map is synchronous here, we can't await inside map without Promise.all!
+      // const branchAppointments = await prisma.appointment.count({ where: { salonId: req.salonId, branchId: b.id, status: { not: "CANCELLED" }, ...dateFilter } }).catch(() => 0);
       // Let's just mock appointments per branch since it requires an async call, or do a group by.
       return {
         id: b.id,
