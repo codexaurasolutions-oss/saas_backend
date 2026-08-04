@@ -754,118 +754,6 @@ superAdminRouter.get("/audit-logs", asyncHandler(async (req, res) => {
   res.json(logs);
 }));
 
-superAdminRouter.get("/product-requirements", asyncHandler(async (req, res) => {
-  const where = {};
-  if (req.query.status) where.status = req.query.status;
-  if (req.query.priority) where.priority = req.query.priority;
-  if (req.query.branchId) where.branchId = req.query.branchId;
-  if (req.query.q) {
-    where.OR = [
-      { productName: { contains: req.query.q, mode: "insensitive" } },
-      { description: { contains: req.query.q, mode: "insensitive" } },
-      { vendor: { contains: req.query.q, mode: "insensitive" } }
-    ];
-  }
-  const rows = await prisma.productRequirement.findMany({ where, include: { salon: true }, orderBy: { createdAt: "desc" } });
-  res.json(rows);
-}));
-
-superAdminRouter.post("/product-requirements", asyncHandler(async (req, res) => {
-  const row = await prisma.productRequirement.create({ data: {
-    productName: req.body.productName,
-    description: req.body.description || null,
-    category: req.body.category || null,
-    quantity: parseInt(req.body.requiredQty || req.body.quantity || 1, 10),
-    unitPrice: req.body.unitCost || req.body.unitPrice ? parseFloat(req.body.unitCost || req.body.unitPrice) : null,
-    priority: req.body.priority || "MEDIUM",
-    status: req.body.status || "PENDING",
-    vendor: req.body.vendor || null
-  }});
-  res.status(201).json(row);
-}));
-
-superAdminRouter.patch("/product-requirements/:id", asyncHandler(async (req, res) => {
-  const existing = await prisma.productRequirement.findUnique({ where: { id: req.params.id } });
-  if (!existing) return res.status(404).json({ message: "Not found" });
-  const data = {};
-  if (req.body.productName !== undefined) data.productName = req.body.productName;
-  if (req.body.description !== undefined) data.description = req.body.description;
-  if (req.body.category !== undefined) data.category = req.body.category;
-  if (req.body.requiredQty !== undefined || req.body.quantity !== undefined) data.quantity = parseInt(req.body.requiredQty || req.body.quantity, 10);
-  if (req.body.unitCost !== undefined || req.body.unitPrice !== undefined) data.unitPrice = parseFloat(req.body.unitCost || req.body.unitPrice);
-  if (req.body.priority !== undefined) data.priority = req.body.priority;
-  if (req.body.status !== undefined) data.status = req.body.status;
-  if (req.body.vendor !== undefined) data.vendor = req.body.vendor;
-  res.json(await prisma.productRequirement.update({ where: { id: req.params.id }, data }));
-}));
-
-superAdminRouter.delete("/product-requirements/:id", asyncHandler(async (req, res) => {
-  await prisma.productRequirement.delete({ where: { id: req.params.id } });
-  res.json({ message: "Deleted" });
-}));
-
-superAdminRouter.get("/staff-requirements", asyncHandler(async (req, res) => {
-  const where = {};
-  if (req.query.status) where.status = req.query.status;
-  if (req.query.urgency) where.urgency = req.query.urgency;
-  if (req.query.branchId) where.branchId = req.query.branchId;
-  if (req.query.department) where.department = req.query.department;
-  if (req.query.q) {
-    where.OR = [
-      { title: { contains: req.query.q, mode: "insensitive" } },
-      { description: { contains: req.query.q, mode: "insensitive" } },
-      { department: { contains: req.query.q, mode: "insensitive" } },
-      { skills: { contains: req.query.q, mode: "insensitive" } }
-    ];
-  }
-  const rows = await prisma.staffRequirement.findMany({ where, include: { salon: true }, orderBy: { createdAt: "desc" } });
-  res.json(rows);
-}));
-
-superAdminRouter.post("/staff-requirements", asyncHandler(async (req, res) => {
-  const skillsStr = Array.isArray(req.body.skills) ? req.body.skills.join(",") : (req.body.skills || null);
-  const row = await prisma.staffRequirement.create({ data: {
-    salonId: req.body.salonId || null,
-    branchId: req.body.branchId || null,
-    title: req.body.title,
-    description: req.body.description || null,
-    department: req.body.department || null,
-    position: req.body.position || null,
-    salary: req.body.salary || null,
-    shift: req.body.shift || "Full-Time",
-    urgency: req.body.urgency || "MEDIUM",
-    skills: skillsStr,
-    count: Number(req.body.quantity) || Number(req.body.count) || 1,
-    priority: req.body.priority || "MEDIUM",
-    status: req.body.status || "OPEN"
-  }});
-  res.status(201).json(row);
-}));
-
-superAdminRouter.patch("/staff-requirements/:id", asyncHandler(async (req, res) => {
-  const existing = await prisma.staffRequirement.findUnique({ where: { id: req.params.id } });
-  if (!existing) return res.status(404).json({ message: "Not found" });
-  const data = {};
-  if (req.body.title !== undefined) data.title = req.body.title;
-  if (req.body.description !== undefined) data.description = req.body.description;
-  if (req.body.department !== undefined) data.department = req.body.department;
-  if (req.body.position !== undefined) data.position = req.body.position;
-  if (req.body.salary !== undefined) data.salary = req.body.salary;
-  if (req.body.shift !== undefined) data.shift = req.body.shift;
-  if (req.body.urgency !== undefined) data.urgency = req.body.urgency;
-  if (req.body.priority !== undefined) data.priority = req.body.priority;
-  if (req.body.status !== undefined) data.status = req.body.status;
-  if (req.body.branchId !== undefined) data.branchId = req.body.branchId || null;
-  if (req.body.salonId !== undefined) data.salonId = req.body.salonId || null;
-  if (req.body.quantity !== undefined || req.body.count !== undefined) data.count = Number(req.body.quantity) || Number(req.body.count);
-  if (req.body.skills !== undefined) data.skills = Array.isArray(req.body.skills) ? req.body.skills.join(",") : (req.body.skills || null);
-  res.json(await prisma.staffRequirement.update({ where: { id: req.params.id }, data }));
-}));
-
-superAdminRouter.delete("/staff-requirements/:id", asyncHandler(async (req, res) => {
-  await prisma.staffRequirement.delete({ where: { id: req.params.id } });
-  res.json({ message: "Deleted" });
-}));
 
 superAdminRouter.get("/branches/limit-info", asyncHandler(async (req, res) => {
   const { salonId } = req.query;
@@ -1015,8 +903,6 @@ const AVAILABLE_PAGES = [
   { key: "demo-leads", label: "Demo Pipeline", group: "Operations" },
   { key: "support-tickets", label: "Support Queue", group: "Operations" },
   { key: "traffic", label: "Traffic Analytics", group: "Operations" },
-  { key: "staff-requirements", label: "Staff Requirements", group: "Operations" },
-  { key: "product-requirements", label: "Product Requirements", group: "Operations" },
   { key: "settings", label: "Global Settings", group: "System" },
   { key: "audit-logs", label: "Platform Logs", group: "System" }
 ];
