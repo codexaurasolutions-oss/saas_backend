@@ -8,34 +8,34 @@ import { prisma } from "../../lib/prisma.js";
 import crypto from "crypto";
 
 export const registerPublicPhase3Routes = (publicRouter) => {
-  publicRouter.get("/salons/:slug", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug", asyncHandler(async (req, res) => {
     res.json(await getPublicCatalogData(req.params.slug));
   }));
-  publicRouter.get("/salons/:slug/services", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/services", asyncHandler(async (req, res) => {
     const data = await getPublicCatalogData(req.params.slug);
     res.json({ salon: data.salon, settings: data.settings, services: data.services });
   }));
-  publicRouter.get("/salons/:slug/packages", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/packages", asyncHandler(async (req, res) => {
     const data = await getPublicCatalogData(req.params.slug);
     res.json({ salon: data.salon, settings: data.settings, packages: data.packages });
   }));
-  publicRouter.get("/salons/:slug/memberships", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/memberships", asyncHandler(async (req, res) => {
     const data = await getPublicCatalogData(req.params.slug);
     res.json({ salon: data.salon, settings: data.settings, memberships: data.memberships });
   }));
-  publicRouter.get("/salons/:slug/products", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/products", asyncHandler(async (req, res) => {
     const data = await getPublicCatalogData(req.params.slug);
     res.json({ salon: data.salon, settings: data.settings, products: data.products });
   }));
-  publicRouter.get("/salons/:slug/offers", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/offers", asyncHandler(async (req, res) => {
     const data = await getPublicCatalogData(req.params.slug);
     res.json({ salon: data.salon, settings: data.settings, offers: data.offers });
   }));
-  publicRouter.post("/salons/:slug/analytics/event", validate(schemas.catalogEvent), asyncHandler(async (req, res) => {
+  publicRouter.post("/salon/:slug/analytics/event", validate(schemas.catalogEvent), asyncHandler(async (req, res) => {
     const event = await trackCatalogEvent({ slug: req.params.slug, body: req.body });
     res.status(201).json({ ok: true, eventId: event?.id || null });
   }));
-  publicRouter.post("/salons/:slug/book", validate(schemas.publicBooking), asyncHandler(async (req, res) => {
+  publicRouter.post("/salon/:slug/book", validate(schemas.publicBooking), asyncHandler(async (req, res) => {
     const appointment = await createPublicAppointment({ slug: req.params.slug, body: req.body });
     await attemptCustomerTemplateEmail({
       salonId: appointment.salonId,
@@ -58,13 +58,13 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     }).catch(() => {});
     res.status(201).json(appointment);
   }));
-  publicRouter.post("/salons/:slug/cart/validate", rateLimit({ windowMs: 60_000, max: 10, message: "Too many requests. Please try again later." }), validate(schemas.cartValidate), asyncHandler(async (req, res) => {
+  publicRouter.post("/salon/:slug/cart/validate", rateLimit({ windowMs: 60_000, max: 10, message: "Too many requests. Please try again later." }), validate(schemas.cartValidate), asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     await ensurePublicStoreEnabled(salon.id);
     const products = await validateCartAgainstStock(salon.id, req.body.items);
     res.json({ ok: true, products });
   }));
-  publicRouter.post("/salons/:slug/orders", rateLimit({ windowMs: 60_000, max: 5, message: "Too many order attempts. Please try again later." }), validate(schemas.createOrder), asyncHandler(async (req, res) => {
+  publicRouter.post("/salon/:slug/orders", rateLimit({ windowMs: 60_000, max: 5, message: "Too many order attempts. Please try again later." }), validate(schemas.createOrder), asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     await ensurePublicStoreEnabled(salon.id);
     const order = await createOnlineOrder({ salonId: salon.id, body: req.body, source: "PUBLIC_STORE" });
@@ -72,7 +72,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     res.status(201).json(order);
   }));
 
-  publicRouter.get("/salons/:slug/storefront-services", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/storefront-services", asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     const { branchId } = req.query;
     const where = { salonId: salon.id, isActive: true, showOnWebsite: true };
@@ -94,7 +94,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     res.json({ services, branches });
   }));
 
-  publicRouter.get("/salons/:slug/booked-slots", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/booked-slots", asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     const { branchId, date } = req.query;
     if (!branchId || !date) {
@@ -124,7 +124,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     res.json({ bookedSlots });
   }));
 
-  publicRouter.post("/salons/:slug/service-bookings", rateLimit({ windowMs: 60_000, max: 5, message: "Too many booking attempts. Please try again later." }), asyncHandler(async (req, res) => {
+  publicRouter.post("/salon/:slug/service-bookings", rateLimit({ windowMs: 60_000, max: 5, message: "Too many booking attempts. Please try again later." }), asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     const { serviceId, customerName, customerPhone, customerEmail, preferredDate, preferredTime, staffId, note } = req.body;
 
@@ -278,7 +278,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     });
   }));
 
-  publicRouter.get("/salons/:slug/track-booking", rateLimit({ windowMs: 60_000, max: 10, message: "Too many requests. Please try again later." }), asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/track-booking", rateLimit({ windowMs: 60_000, max: 10, message: "Too many requests. Please try again later." }), asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     const { bookingNumber, phone } = req.query;
     if (!bookingNumber) return res.status(400).json({ message: "bookingNumber is required" });
@@ -294,7 +294,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     res.json({ ...orderWithoutNote, serviceInfo });
   }));
 
-  publicRouter.get("/salons/:slug/my-bookings", asyncHandler(async (req, res) => {
+  publicRouter.get("/salon/:slug/my-bookings", asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     const { phone } = req.query;
     if (!phone) return res.status(400).json({ message: "phone is required" });
@@ -312,7 +312,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     res.json(enriched);
   }));
 
-  publicRouter.patch("/salons/:slug/my-bookings/:orderNumber/cancel", asyncHandler(async (req, res) => {
+  publicRouter.patch("/salon/:slug/my-bookings/:orderNumber/cancel", asyncHandler(async (req, res) => {
     const { salon } = await resolvePublicSalonBySlug(req.params.slug);
     const { phone } = req.body;
     if (!phone) return res.status(400).json({ message: "phone is required" });
