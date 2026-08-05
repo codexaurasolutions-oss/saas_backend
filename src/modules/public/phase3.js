@@ -278,6 +278,16 @@ export const registerPublicPhase3Routes = (publicRouter) => {
       return res.status(409).json({ message: "This time slot is already booked for the selected staff. Please choose a different time." });
     }
 
+    const { sendWhatsApp } = await import("../../lib/whatsappService.js");
+    sendWhatsApp({
+      salonId: salon.id,
+      to: customerPhone,
+      customerId: result.order.customerId,
+      message: `Hi ${customerName.trim()}! Your booking #${orderNumber} for ${service.name} on ${preferredDate} at ${preferredTime} is confirmed. We look forward to seeing you!`,
+      templateName: "jaspers_market_order_confirmation_v1",
+      templateParams: [customerName.trim(), orderNumber, `${preferredDate} ${preferredTime}`]
+    }).catch(() => {});
+
     res.status(201).json({
       order: result.order,
       appointment: result.appointment,

@@ -11,7 +11,7 @@ import { prisma } from "./prisma.js";
  * Docs: https://developers.facebook.com/docs/whatsapp/cloud-api
  */
 
-const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v18.0";
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_BASE_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`;
 const WHATSAPP_TIMEOUT_MS = Number(process.env.WHATSAPP_TIMEOUT_MS || 15000);
 
