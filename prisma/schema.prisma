@@ -567,6 +567,7 @@ model Service {
   isFeatured             Boolean                  @default(false)
   isPopular              Boolean                  @default(false)
   isPublicVisible        Boolean                  @default(true)
+  showOnWebsite          Boolean                  @default(false)
   isActive               Boolean                  @default(true)
   hideFromCatalogue      Boolean                  @default(false)
   nonDiscountable        Boolean                  @default(false)

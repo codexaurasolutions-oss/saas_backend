@@ -5,6 +5,9 @@ import { createInvoiceNumber } from "./pos.js";
 
 const publicFeatureEnabled = (flags = {}, key) => flags?.[key] !== false;
 
+const catalogCache = new Map();
+const CATALOG_CACHE_TTL = 30_000;
+
 export const defaultCatalogTheme = "#0f766e";
 
 export const buildCatalogLink = (slug) => `${process.env.FRONTEND_APP_URL || "http://127.0.0.1:5173"}/salon/${slug}`;
@@ -141,6 +144,9 @@ export const resolvePublicSalonBySlug = async (slug) => {
 };
 
 export const getPublicCatalogData = async (slug) => {
+  const cached = catalogCache.get(slug);
+  if (cached && Date.now() - cached.ts < CATALOG_CACHE_TTL) return cached.data;
+
   const { salon, catalogSettings, ecommerceSettings } = await resolvePublicSalonBySlug(slug);
   const appointmentSettings = await prisma.appointmentSetting.findMany({
     where: { salonId: salon.id },
@@ -186,7 +192,7 @@ export const getPublicCatalogData = async (slug) => {
     prisma.catalogBanner.findMany({ where: { salonId: salon.id, isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }] })
   ]);
 
-  return {
+  const result = {
     salon,
     settings: {
       ...catalogSettings,
@@ -210,6 +216,13 @@ export const getPublicCatalogData = async (slug) => {
     ),
     storeEnabled: Boolean(publicFeatureEnabled(salon.featureFlags, "ecommerce") !== false && ecommerceSettings?.storeEnabled)
   };
+
+  catalogCache.set(slug, { data: result, ts: Date.now() });
+  if (catalogCache.size > 200) {
+    const oldest = catalogCache.keys().next().value;
+    catalogCache.delete(oldest);
+  }
+  return result;
 };
 
 export const trackCatalogEvent = async ({ slug, body }) => {
@@ -227,7 +240,8 @@ export const trackCatalogEvent = async ({ slug, body }) => {
         metadata: body.metadata || null
       }
     });
-  } catch {
+  } catch (err) {
+    console.error("[trackCatalogEvent] Error:", err?.message || err);
     return null;
   }
 };
@@ -359,10 +373,21 @@ export const validateCartAgainstStock = async (salonId, items) => {
 export const createOnlineOrder = async ({ salonId, body, actorName = "PUBLIC_STORE", source = "PUBLIC_STORE" }) => {
   const branchId = normalizeBranchId(body.branchId);
   if (branchId) await ensureScopedBranch(salonId, branchId);
-  const products = await validateCartAgainstStock(salonId, body.items);
-  const productMap = new Map(products.map((product) => [product.id, product]));
 
   return prisma.$transaction(async (tx) => {
+    const products = await tx.product.findMany({
+      where: { salonId, id: { in: body.items.map((item) => item.productId) }, isActive: true, isOnlineVisible: true }
+    });
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    for (const item of body.items) {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        throw Object.assign(new Error("One or more products are unavailable"), { status: 400 });
+      }
+      if (toAmount(product.currentStock) < Number(item.qty)) {
+        throw Object.assign(new Error(`Out of stock: ${product.name}`), { status: 400 });
+      }
+    }
     let customer = null;
     if (body.customerId) {
       customer = await ensureScopedCustomer(salonId, body.customerId);
@@ -389,14 +414,15 @@ export const createOnlineOrder = async ({ salonId, body, actorName = "PUBLIC_STO
       }
     }
 
-    const count = await tx.onlineOrder.count({ where: { salonId } });
-    const random = crypto.randomBytes(2).toString("hex").toUpperCase();
-    const orderNumber = `ORD-${String(count + 1).padStart(5, "0")}-${random}`;
+    const random = crypto.randomBytes(6).toString("hex").toUpperCase();
+    const orderNumber = `ORD-${random.slice(0, 5)}-${random.slice(5)}`;
     const subtotal = body.items.reduce((sum, item) => {
       const product = productMap.get(item.productId);
       return sum + toAmount(product.sellingPrice) * Number(item.qty);
     }, 0);
-    const total = subtotal;
+    const discount = Math.max(0, Math.min(toAmount(body.discount || 0), subtotal));
+    const tax = Math.max(0, toAmount(body.tax || 0));
+    const total = Math.max(0, subtotal - discount + tax);
 
     const order = await tx.onlineOrder.create({
       data: {
@@ -408,10 +434,12 @@ export const createOnlineOrder = async ({ salonId, body, actorName = "PUBLIC_STO
         customerPhone: customer.phone,
         customerEmail: customer.email || null,
         note: body.note || null,
-        paymentStatus: body.paymentMode === "ONLINE_PLACEHOLDER" ? "PENDING" : "PENDING",
+        paymentStatus: "PENDING",
         fulfillmentMethod: body.fulfillmentMethod || "PICKUP",
         source,
         subtotal,
+        discount,
+        tax,
         total,
         couponCode: body.couponCode || null,
         giftCardCode: body.giftCardCode || null,
@@ -483,7 +511,9 @@ export const createOnlineOrder = async ({ salonId, body, actorName = "PUBLIC_STO
 
 export const reverseOrderStock = async (tx, order, actorName, note) => {
   const items = order.items || await tx.onlineOrderItem.findMany({ where: { orderId: order.id } });
+  if (!items || items.length === 0) return;
   for (const item of items) {
+    if (!item.productId) continue;
     await createStockMovement(tx, {
       salonId: order.salonId,
       branchId: order.branchId || null,
