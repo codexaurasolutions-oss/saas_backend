@@ -94,7 +94,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
       }))
     }));
     const branches = await prisma.branch.findMany({
-      where: { salonId: salon.id, isArchived: false },
+      where: { salonId: salon.id, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" }
     });
@@ -166,11 +166,11 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     });
     if (!service) return res.status(404).json({ message: "Service not found or not available for booking" });
 
-    const defaultBranch = await prisma.branch.findFirst({ where: { salonId: salon.id, isArchived: false } });
+    const defaultBranch = await prisma.branch.findFirst({ where: { salonId: salon.id, isActive: true } });
     const branchId = service.branchId || defaultBranch?.id;
     if (!branchId) return res.status(400).json({ message: "No branch available for booking" });
 
-    const branchExists = await prisma.branch.findFirst({ where: { id: branchId, salonId: salon.id, isArchived: false }, select: { id: true } });
+    const branchExists = await prisma.branch.findFirst({ where: { id: branchId, salonId: salon.id, isActive: true }, select: { id: true } });
     if (!branchExists) return res.status(400).json({ message: "Invalid branch for this salon" });
 
     const startAt = new Date(`${preferredDate}T${preferredTime}:00Z`);
