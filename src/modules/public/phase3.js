@@ -82,7 +82,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
       include: {
         category: true,
         branch: { select: { id: true, name: true } },
-        staffAssignments: { include: { userSalon: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } } } }
+        staffAssignments: { include: { userSalon: { include: { user: { select: { id: true, name: true } } } } } }
       },
       orderBy: { position: "asc" }
     })).map(s => ({
@@ -90,7 +90,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
       staffAssignments: (s.staffAssignments || []).map(sa => ({
         ...sa,
         user: sa.userSalon?.user || null,
-        avatarUrl: sa.userSalon?.avatarUrl || sa.userSalon?.user?.avatarUrl || null,
+        avatarUrl: sa.userSalon?.avatarUrl || null,
       }))
     }));
     const branches = await prisma.branch.findMany({
