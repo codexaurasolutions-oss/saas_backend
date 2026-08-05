@@ -77,15 +77,22 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     const { branchId } = req.query;
     const where = { salonId: salon.id, isActive: true, showOnWebsite: true };
     if (branchId) where.branchId = branchId;
-    const services = await prisma.service.findMany({
+    const services = (await prisma.service.findMany({
       where,
       include: {
         category: true,
         branch: { select: { id: true, name: true } },
-        staffAssignments: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } }
+        staffAssignments: { include: { userSalon: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } } } }
       },
       orderBy: { position: "asc" }
-    });
+    })).map(s => ({
+      ...s,
+      staffAssignments: (s.staffAssignments || []).map(sa => ({
+        ...sa,
+        user: sa.userSalon?.user || null,
+        avatarUrl: sa.userSalon?.avatarUrl || sa.userSalon?.user?.avatarUrl || null,
+      }))
+    }));
     const branches = await prisma.branch.findMany({
       where: { salonId: salon.id, isArchived: false },
       select: { id: true, name: true },
