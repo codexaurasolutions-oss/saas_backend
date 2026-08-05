@@ -756,12 +756,79 @@ superAdminRouter.get("/audit-logs", asyncHandler(async (req, res) => {
 
 
 superAdminRouter.get("/traffic-analytics", asyncHandler(async (req, res) => {
+  const { period = "7d", salonId } = req.query;
+  const where = {};
+  if (salonId && salonId !== "all") {
+    where.salonId = salonId;
+  }
+
+  const now = new Date();
+  let startDate = new Date();
+  if (period === "today") startDate.setHours(0, 0, 0, 0);
+  else if (period === "7d") startDate.setDate(now.getDate() - 7);
+  else if (period === "30d") startDate.setDate(now.getDate() - 30);
+  else if (period === "90d") startDate.setDate(now.getDate() - 90);
+  else startDate = new Date(0);
+
+  if (period !== "all") {
+    where.createdAt = { gte: startDate };
+  }
+
+  const visits = await prisma.websiteVisit.findMany({
+    where,
+    include: { salon: { select: { name: true, slug: true } } },
+    orderBy: { createdAt: "asc" }
+  });
+
+  const totalVisits = visits.length;
+  const uniqueVisitors = new Set(visits.map(v => v.ip || v.userAgent || v.id)).size;
+
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const yesterdayStart = new Date(now);
+  yesterdayStart.setDate(now.getDate() - 1);
+  yesterdayStart.setHours(0, 0, 0, 0);
+
+  const todayVisits = visits.filter(v => new Date(v.createdAt) >= todayStart).length;
+  const yesterdayVisits = visits.filter(v => new Date(v.createdAt) >= yesterdayStart && new Date(v.createdAt) < todayStart).length;
+
+  const visitsByDayMap = {};
+  visits.forEach(v => {
+    const d = new Date(v.createdAt).toISOString().split('T')[0];
+    visitsByDayMap[d] = (visitsByDayMap[d] || 0) + 1;
+  });
+  const visitsByDay = Object.keys(visitsByDayMap).map(date => ({ date, count: visitsByDayMap[date] }));
+
+  const salonCounts = {};
+  visits.forEach(v => {
+    if (v.salon) {
+      const id = v.salonId;
+      if (!salonCounts[id]) salonCounts[id] = { salon: v.salon, visits: 0 };
+      salonCounts[id].visits++;
+    }
+  });
+  const topPages = Object.values(salonCounts).sort((a, b) => b.visits - a.visits).slice(0, 10);
+
+  const pathCounts = {};
+  visits.forEach(v => {
+    const p = v.path || "/";
+    pathCounts[p] = (pathCounts[p] || 0) + 1;
+  });
+  const topPaths = Object.keys(pathCounts).map(path => ({ path, count: pathCounts[path] })).sort((a, b) => b.count - a.count).slice(0, 10);
+
+  const referrerCounts = {};
+  visits.forEach(v => {
+    const r = v.referrer || "Direct";
+    referrerCounts[r] = (referrerCounts[r] || 0) + 1;
+  });
+  const topReferrers = Object.keys(referrerCounts).map(referrer => ({ referrer, count: referrerCounts[referrer] })).sort((a, b) => b.count - a.count).slice(0, 10);
+
   res.json({
-    summary: { totalVisits: 0, uniqueVisitors: 0, todayVisits: 0, yesterdayVisits: 0 },
-    visitsByDay: [],
-    topPages: [],
-    topPaths: [],
-    topReferrers: []
+    summary: { totalVisits, uniqueVisitors, todayVisits, yesterdayVisits },
+    visitsByDay,
+    topPages,
+    topPaths,
+    topReferrers
   });
 }));
 
