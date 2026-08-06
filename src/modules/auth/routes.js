@@ -27,7 +27,7 @@ const sortMemberships = (memberships = []) =>
     return new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime();
   });
 
-const generateLoginPayload = async (user, membership) => {
+const generateLoginPayload = async (user, membership, rememberMe = false) => {
   const [salon, subscription] = membership
     ? await Promise.all([
         prisma.salon.findUnique({ where: { id: membership.salonId }, select: { name: true, featureFlags: true } }),
@@ -39,8 +39,9 @@ const generateLoginPayload = async (user, membership) => {
       ])
     : [null, null];
   const resolvedSalonId = membership?.salonId || null;
-  const accessToken = signAccessToken({ userId: user.id, salonId: resolvedSalonId });
-  const refreshToken = signRefreshToken({ userId: user.id, salonId: resolvedSalonId });
+  const tokenOptions = rememberMe ? { expiresIn: "30d" } : undefined;
+  const accessToken = signAccessToken({ userId: user.id, salonId: resolvedSalonId }, tokenOptions);
+  const refreshToken = signRefreshToken({ userId: user.id, salonId: resolvedSalonId }, tokenOptions);
   const mergedFeatureFlags = {
     ...(subscription?.plan?.featureFlags || {}),
     ...(salon?.featureFlags || {})
@@ -111,7 +112,7 @@ authRouter.post("/register", validate(schemas.register), async (req, res) => {
 });
 
 authRouter.post("/login", validate(schemas.login), async (req, res) => {
-  const { email, password, loginAccessToken } = req.body;
+  const { email, password, loginAccessToken, rememberMe } = req.body;
   const user = await prisma.user.findUnique({
     where: { email },
     include: {
@@ -180,7 +181,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
     // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log(`\n🔑 [LOGIN OTP] User: ${user.email} | OTP: ${otp}\n`);
-    const tempToken = signTempToken({ userId: user.id, salonId: membership.salonId, otp });
+    const tempToken = signTempToken({ userId: user.id, salonId: membership.salonId, otp, rememberMe: !!rememberMe });
     
     // Send email asynchronously so we don't block the login response
     sendMail({
@@ -225,7 +226,7 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
     });
   }
 
-  const payload = await generateLoginPayload(user, membership);
+  const payload = await generateLoginPayload(user, membership, rememberMe);
   res.json(payload);
 });
 
@@ -255,7 +256,7 @@ authRouter.post("/verify-otp", async (req, res) => {
     );
     const membership = activeMemberships.find((item) => item.salonId === decoded.salonId) || activeMemberships[0] || null;
 
-    const payload = await generateLoginPayload(user, membership);
+    const payload = await generateLoginPayload(user, membership, decoded.rememberMe);
     res.json(payload);
   } catch (err) {
     res.status(401).json({ message: "Invalid or expired token" });
