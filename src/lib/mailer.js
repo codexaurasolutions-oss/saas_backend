@@ -136,6 +136,7 @@ export const sendMail = async (options) => {
       });
 
       if (attempt > 0) console.log(`[mailer] Email sent on attempt ${attempt + 1} to ${options.to}`);
+      console.log(`[mailer] Email sent to ${options.to}: ${options.subject || "(no subject)"} | id=${mail.messageId || "none"}`);
       return {
         mode: mailerMode(),
         messageId: mail.messageId || null,

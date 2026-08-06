@@ -37,7 +37,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
   }));
   publicRouter.post("/salon/:slug/book", validate(schemas.publicBooking), asyncHandler(async (req, res) => {
     const appointment = await createPublicAppointment({ slug: req.params.slug, body: req.body });
-    await attemptCustomerTemplateEmail({
+    const emailResult = await attemptCustomerTemplateEmail({
       salonId: appointment.salonId,
       toEmail: appointment.customer?.email || "",
       templateType: "appointment_confirmation",
@@ -45,8 +45,9 @@ export const registerPublicPhase3Routes = (publicRouter) => {
         appointmentId: appointment.id,
         customerId: appointment.customerId
       }
-    }).catch(() => {});
-    await attemptCustomerTemplateWhatsApp({
+    }).catch((err) => { console.error("[storefront-book] Email failed:", err.message); return { skipped: true, reason: err.message }; });
+    console.log(`[storefront-book] Confirmation email to ${appointment.customer?.email}:`, emailResult?.skipped ? `SKIPPED (${emailResult.reason})` : "SENT");
+    const whatsappResult = await attemptCustomerTemplateWhatsApp({
       salonId: appointment.salonId,
       toPhone: appointment.customer?.phone || "",
       templateType: "appointment_confirmation",
@@ -55,7 +56,8 @@ export const registerPublicPhase3Routes = (publicRouter) => {
         customerId: appointment.customerId
       },
       customerId: appointment.customerId
-    }).catch(() => {});
+    }).catch((err) => { console.error("[storefront-book] WhatsApp failed:", err.message); return { skipped: true, reason: err.message }; });
+    console.log(`[storefront-book] Confirmation WhatsApp to ${appointment.customer?.phone}:`, whatsappResult?.skipped ? `SKIPPED (${whatsappResult.reason})` : "SENT");
     res.status(201).json(appointment);
   }));
   publicRouter.post("/salon/:slug/cart/validate", rateLimit({ windowMs: 60_000, max: 10, message: "Too many requests. Please try again later." }), validate(schemas.cartValidate), asyncHandler(async (req, res) => {

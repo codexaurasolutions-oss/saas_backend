@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "./emailNotifications.js";
-import { sendMail } from "./mailer.js";
+import { sendMail, retryPendingEmails } from "./mailer.js";
 import { sendSms } from "./smsService.js";
 import { sendWhatsApp } from "./whatsappService.js";
 import { buildWhatsAppLink, getCampaignAudience, renderTemplateText, resolveTemplateContext } from "./phase3.js";
@@ -72,8 +72,7 @@ const isReminderAutomationEnabled = (settings) =>
   // respect reminder toggles (default: ON if not set)
   settings.notificationSettings.toggles?.appointmentReminderBeforeDays !== false &&
   settings.notificationSettings.toggles?.appointmentReminderBeforeHours !== false &&
-  settings.notificationSettings.toggles?.messageForAppointments !== false &&
-  settings.notificationSettings.toggles?.smsForServiceReminder !== false;
+  settings.notificationSettings.toggles?.messageForAppointments !== false;
 
 const getReminderWindowMs = (settings) => {
   const days = Math.max(0, toNumber(settings.genericSettings.appointmentReminderDays, 1));
@@ -548,14 +547,16 @@ export const processLifecycleNotifications = async () => {
   const todayStr = `${now.getMonth() + 1}-${now.getDate()}`; // MM-DD for birthday/anniversary match
   const results = { birthday: 0, anniversary: 0, loyaltyExpiry: 0, membershipExpiry: 0, packageExpiry: 0, giftCardExpiry: 0 };
 
-  // Get all distinct salonIds that have settings
-  const salonIds = await prisma.salonSetting.findMany({
-    where: { branchId: null },
-    select: { salonId: true }
+  // Get all distinct active salonIds
+  const salonIds = await prisma.userSalon.findMany({
+    where: { status: "ACTIVE" },
+    select: { salonId: true },
+    distinct: ["salonId"]
   }).then((rows) => rows.map((r) => r.salonId));
 
   for (const salonId of salonIds) {
     const { isOn, emailEnabled, smsEnabled, whatsappEnabled } = await getNotificationToggles(salonId).catch(() => ({ isOn: () => false, emailEnabled: false, smsEnabled: false, whatsappEnabled: false }));
+    console.log(`[email-scheduler] Salon ${salonId}: email=${emailEnabled} sms=${smsEnabled} whatsapp=${whatsappEnabled}`);
 
     // ── Birthday Offer ────────────────────────────────────────────────────────
     if (isOn("birthdayOffer") && (emailEnabled || smsEnabled)) {
@@ -761,13 +762,17 @@ const checkAndSendOwnerDigests = async () => {
 const runEmailAutomationPass = async () => {
   if (schedulerRunning) return;
   schedulerRunning = true;
+  const passStart = Date.now();
   try {
-    await processScheduledCampaigns();
-    await processAppointmentReminderEmails();
-    await processLifecycleNotifications();
+    await retryPendingEmails();
+    const campaigns = await processScheduledCampaigns();
+    const reminders = await processAppointmentReminderEmails();
+    const lifecycle = await processLifecycleNotifications();
     await checkAndSendOwnerDigests();
+    const elapsed = Date.now() - passStart;
+    console.log(`[email-scheduler] Pass completed in ${elapsed}ms — campaigns: ${campaigns.length}, reminders: ${reminders.length}, lifecycle: birthday=${lifecycle.birthday} anniversary=${lifecycle.anniversary} loyaltyExpiry=${lifecycle.loyaltyExpiry} membershipExpiry=${lifecycle.membershipExpiry} packageExpiry=${lifecycle.packageExpiry} giftCardExpiry=${lifecycle.giftCardExpiry}`);
   } catch (error) {
-    console.error("Email automation pass failed", error);
+    console.error("[email-scheduler] Pass failed:", error);
   } finally {
     schedulerRunning = false;
   }
@@ -775,9 +780,17 @@ const runEmailAutomationPass = async () => {
 
 export const startEmailScheduler = () => {
   if (schedulerHandle) return schedulerHandle;
+  console.log(`[email-scheduler] Starting email scheduler (interval: ${DEFAULT_SCHEDULER_INTERVAL_MS}ms)`);
+  console.log(`[email-scheduler] SMTP status:`, JSON.stringify({
+    host: process.env.SMTP_HOST || null,
+    port: process.env.SMTP_PORT || null,
+    secure: process.env.SMTP_SECURE || null,
+    user: process.env.SMTP_USER || null,
+    from: process.env.SMTP_FROM || null
+  }));
   schedulerHandle = setInterval(runEmailAutomationPass, DEFAULT_SCHEDULER_INTERVAL_MS);
   runEmailAutomationPass().catch((error) => {
-    console.error("Initial email automation pass failed", error);
+    console.error("[email-scheduler] Initial pass failed:", error);
   });
   return schedulerHandle;
 };
