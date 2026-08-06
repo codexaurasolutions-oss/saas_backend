@@ -176,6 +176,13 @@ export const attemptCustomerTemplateEmail = async ({ salonId, toEmail, templateT
 /**
  * Send a WhatsApp message using the same message template system.
  * Logs to WhatsAppLog for every attempt.
+ *
+ * IMPORTANT: WhatsApp Business API requires Template Messages (with templateName)
+ * for automated/unsolicited messages. Free-form Text messages only work within
+ * 24 hours of the customer's last message. Template messages work anytime.
+ *
+ * This function checks for a configured WhatsApp template name in WhatsAppAutomation.
+ * If found, sends as Template message. Otherwise falls back to Text message.
  */
 export const attemptCustomerTemplateWhatsApp = async ({ salonId, toPhone, templateType, context = {}, customerId = null, branchId = null }) => {
   if (!toPhone) return { skipped: true, reason: "missing-phone" };
@@ -188,11 +195,43 @@ export const attemptCustomerTemplateWhatsApp = async ({ salonId, toPhone, templa
     const variables = await resolveTemplateContext(salonId, context);
     const messageBody = renderTemplateText(template.content, variables);
 
+    // Check for a configured WhatsApp template name in WhatsAppAutomation
+    let whatsappTemplateName = null;
+    let templateParams = [];
+    try {
+      const automation = await prisma.whatsAppAutomation.findFirst({
+        where: { salonId, templateType, isEnabled: true }
+      });
+      if (automation?.mediaUrl) {
+        // mediaUrl field doubles as WhatsApp template name storage
+        whatsappTemplateName = automation.mediaUrl;
+        // Build template params from resolved variables (ordered by template needs)
+        templateParams = [
+          variables.customer_name || "",
+          variables.salon_name || "",
+          variables.appointment_date_time || "",
+          variables.invoice_number || "",
+          variables.invoice_amount || "",
+          variables.membership_name || "",
+          variables.package_name || "",
+          variables.points_earned || "",
+          variables.new_balance || "",
+          variables.gift_card_code || "",
+          variables.gift_card_amount || "",
+          variables.referral_code || ""
+        ].filter(Boolean);
+      }
+    } catch (_) {
+      // WhatsAppAutomation table may not exist yet — fall back to text
+    }
+
     const result = await sendWhatsApp({
       salonId,
       to: toPhone,
       message: messageBody,
-      customerId
+      customerId,
+      templateName: whatsappTemplateName,
+      templateParams: whatsappTemplateName ? templateParams : undefined
     });
 
     await prisma.whatsAppLog.create({
