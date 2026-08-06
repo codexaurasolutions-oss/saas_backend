@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { prisma } from "../../../lib/prisma.js";
 import { getNotificationToggles, maybeSendFeedbackRequestForAppointment } from "../../../lib/emailAutomation.js";
 import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "../../../lib/emailNotifications.js";
-import { checkStaffAvailability, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
+import { checkStaffAvailability, convertToPrimaryUnit, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, normalizeBranchId, toAmount } from "../../../lib/phase2.js";
 import { createCustomerNotification, createStaffNotification } from "../../../lib/phase4.js";
 import { requireFeatureEnabled, requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
@@ -635,18 +635,19 @@ export const registerAppointmentRoutes = (ownerRouter) => {
             for (const cons of matchedConsumables.length > 0 ? matchedConsumables : svc.consumables.filter(c => c.variation == null)) {
               const overrideKey = `${item.serviceId}:${cons.productId}`;
               const overrideQty = consumableOverrides?.[overrideKey];
-              const qtyToDeduct = overrideQty != null ? Number(overrideQty) : Number(cons.reqdQty);
-              if (qtyToDeduct > 0) {
+              const rawQty = overrideQty != null ? Number(overrideQty) : Number(cons.reqdQty);
+              const consumedPrimaryUnits = convertToPrimaryUnit(rawQty, cons.product?.netWeight);
+              if (consumedPrimaryUnits > 0) {
                 await createStockMovement(tx, {
                   salonId: req.salonId,
                   branchId: appointment.branchId,
                   productId: cons.productId,
-                  quantity: -qtyToDeduct * Number(item.qty || 1),
+                  quantity: -consumedPrimaryUnits * Number(item.qty || 1),
                   movementType: "CONSUMABLE_USAGE",
                   createdByUserId: req.user.id,
                   referenceType: "INVOICE",
                   referenceId: created.id,
-                  note: overrideQty != null ? `Override: ${overrideQty} ${cons.product?.unit || ""} (default: ${cons.reqdQty})` : null,
+                  note: overrideQty != null ? `Override: ${rawQty} ${cons.product?.secondaryUnit || cons.product?.unit || ""} (default: ${cons.reqdQty})` : null,
                   allowNegativeStock: false
                 });
               }

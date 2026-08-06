@@ -230,6 +230,16 @@ export const registerAdvancedReportRoutes = (ownerRouter) => {
     const serviceRevenue = invoices.reduce((s, r) => s + toNumber(r.total) - toNumber(r.productTotal || 0), 0);
     const productRevenue = invoices.reduce((s, r) => s + toNumber(r.productTotal || 0), 0);
 
+    const productCogs = invoices.reduce((s, inv) => s + (inv.items || [])
+      .filter(i => i.itemType === "PRODUCT" && i.productId)
+      .reduce((a, i) => a + toNumber(i.qty || 1) * toNumber(i.unitPrice || 0), 0), 0);
+    const consumableMovements = await prisma.stockMovement.findMany({
+      where: { salonId: req.salonId, movementType: "CONSUMABLE_USAGE", createdAt: dateFilter, ...bs },
+      include: { product: true }
+    });
+    const consumableCogs = consumableMovements.reduce((sum, m) => sum + Math.abs(toNumber(m.quantity)) * toNumber(m.product?.costPrice || 0), 0);
+    const costOfGoodsSold = productCogs + consumableCogs;
+
     const inflows = { CASH: 0, CARD: 0, UPI: 0, BANK_TRANSFER: 0, WALLET: 0, ONLINE: 0 };
     payments.forEach(p => { const m = (p.mode || "CASH").toUpperCase(); if (inflows[m] !== undefined) inflows[m] += toNumber(p.amount); });
     const inflowTotal = Object.values(inflows).reduce((a, b) => a + b, 0);
@@ -244,19 +254,19 @@ export const registerAdvancedReportRoutes = (ownerRouter) => {
     res.json({
       summary: {
         totalGrossIncome: totalRevenue,
-        grossProfit: totalRevenue - totalExpenses,
-        grossMargin: totalRevenue ? Math.round(((totalRevenue - totalExpenses) / totalRevenue) * 100) : 0,
+        grossProfit: totalRevenue - costOfGoodsSold - totalExpenses,
+        grossMargin: totalRevenue ? Math.round(((totalRevenue - costOfGoodsSold) / totalRevenue) * 100) : 0,
         totalExpensesPayroll: totalExpenses,
-        netProfit: totalRevenue - totalExpenses,
-        netMargin: totalRevenue ? Math.round(((totalRevenue - totalExpenses) / totalRevenue) * 100) : 0
+        netProfit: totalRevenue - costOfGoodsSold - totalExpenses,
+        netMargin: totalRevenue ? Math.round(((totalRevenue - costOfGoodsSold - totalExpenses) / totalRevenue) * 100) : 0
       },
       pnl: {
         revenue: { services: serviceRevenue, products: productRevenue, memberships: 0, packages: 0, giftCards: 0, total: totalRevenue },
-        costOfGoodsSold: 0,
-        grossProfit: totalRevenue,
+        costOfGoodsSold,
+        grossProfit: totalRevenue - costOfGoodsSold,
         expenses: { rent: expenseByCategory["Rent"] || 0, utilities: expenseByCategory["Utilities"] || 0, supplies: expenseByCategory["Supplies"] || 0, marketing: expenseByCategory["Marketing"] || 0, other: totalExpenses, total: totalExpenses },
         payroll: expenseByCategory["Payroll"] || 0,
-        netProfit: totalRevenue - totalExpenses
+        netProfit: totalRevenue - costOfGoodsSold - totalExpenses
       },
       cashFlow: {
         inflows: { ...inflows, total: inflowTotal },

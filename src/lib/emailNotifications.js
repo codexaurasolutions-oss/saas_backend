@@ -138,6 +138,11 @@ const resolveMessageTemplate = async (salonId, templateType) => {
 };
 
 export const attemptCustomerTemplateEmail = async ({ salonId, toEmail, templateType, context = {} }) => {
+  if (process.env.CUSTOMER_EMAILS_DISABLED === "true") {
+    console.log(`[email] CUSTOMER_EMAILS_DISABLED=true, skipping email to ${toEmail}: ${templateType}`);
+    return { skipped: true, reason: "customer-emails-disabled" };
+  }
+
   if (!toEmail) {
     return { skipped: true, reason: "missing-recipient" };
   }

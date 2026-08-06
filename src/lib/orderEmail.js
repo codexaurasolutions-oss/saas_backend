@@ -208,6 +208,11 @@ export const sendOrderConfirmationEmail = async ({ order, salonId }) => {
   }
 
   try {
+    if (process.env.CUSTOMER_EMAILS_DISABLED === "true") {
+      console.log(`[orderEmail] CUSTOMER_EMAILS_DISABLED=true, skipping order confirmation email to ${order.customerEmail}`);
+      return { skipped: true, reason: "customer-emails-disabled" };
+    }
+
     const salon = await prisma.salon.findUnique({ where: { id: salonId } });
     if (!salon) return { skipped: true, reason: "salon-not-found" };
 

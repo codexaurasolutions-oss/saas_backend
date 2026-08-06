@@ -906,3 +906,26 @@ superAdminRouter.delete("/staff/:id", asyncHandler(async (req, res) => {
   await prisma.user.delete({ where: { id: req.params.id } });
   res.json({ message: "Deleted" });
 }));
+
+superAdminRouter.get("/staff-requirements", asyncHandler(async (req, res) => {
+  const requirements = await prisma.staffRequirement.findMany({
+    include: { salon: { select: { id: true, name: true, slug: true } } },
+    orderBy: { createdAt: "desc" }
+  });
+  res.json(requirements);
+}));
+
+superAdminRouter.patch("/staff-requirements/:id", asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ["OPEN", "IN_PROGRESS", "CLOSED"];
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ message: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+  }
+  const requirement = await prisma.staffRequirement.findUnique({ where: { id: req.params.id } });
+  if (!requirement) return res.status(404).json({ message: "Requirement not found" });
+  const updated = await prisma.staffRequirement.update({
+    where: { id: requirement.id },
+    data: { status }
+  });
+  res.json(updated);
+}));

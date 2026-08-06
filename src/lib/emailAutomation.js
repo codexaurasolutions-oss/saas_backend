@@ -280,6 +280,11 @@ export const maybeSendFeedbackRequestForInvoice = async ({
 };
 
 const sendCampaignEmail = async ({ salonId, campaign, customer }) => {
+  if (process.env.CUSTOMER_EMAILS_DISABLED === "true") {
+    console.log(`[campaign] CUSTOMER_EMAILS_DISABLED=true, skipping campaign email to ${customer?.email}`);
+    return { skipped: true, reason: "customer-emails-disabled" };
+  }
+
   if (!customer?.email) {
     return { skipped: true, reason: "missing-email" };
   }

@@ -1,6 +1,12 @@
 import { prisma } from "./prisma.js";
 
 export const toAmount = (value) => Number(value || 0);
+
+export const convertToPrimaryUnit = (secondaryQty, netWeight) => {
+  const nw = toAmount(netWeight);
+  if (nw <= 0) return toAmount(secondaryQty);
+  return toAmount(secondaryQty) / nw;
+};
 export const normalizeBranchId = (value) => {
   if (!value || value === "undefined" || value === "null" || value === "ALL") return null;
   return String(value);

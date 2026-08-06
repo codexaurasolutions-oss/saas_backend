@@ -117,6 +117,13 @@ export const registerOwnerReportRoutes = (ownerRouter) => {
       });
     }
 
+    const consumableMovements = await prisma.stockMovement.findMany({
+      where: { salonId: req.salonId, movementType: "CONSUMABLE_USAGE", createdAt: dateFilter, ...(branchId ? { branchId } : {}) },
+      include: { product: true }
+    });
+    const consumableCogs = consumableMovements.reduce((sum, m) => sum + Math.abs(Number(m.quantity)) * Number(m.product?.costPrice || 0), 0);
+    costOfGoodsSold += consumableCogs;
+
     const expensesCategorized = { rent: 0, utilities: 0, supplies: 0, marketing: 0, other: 0, total: 0 };
     expenses.forEach(exp => {
       const amt = Number(exp.amount || 0);

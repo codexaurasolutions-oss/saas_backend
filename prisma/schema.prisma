@@ -2395,3 +2395,5 @@ model WebsiteVisit {
 
   salon     Salon    @relation(fields: [salonId], references: [id])
 }
+
+

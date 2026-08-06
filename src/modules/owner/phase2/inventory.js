@@ -110,6 +110,8 @@ export const registerInventoryRoutes = (ownerRouter) => {
         unit: req.body.unit || null,
         secondaryUnit: req.body.secondaryUnit || null,
         unitConversion: req.body.unitConversion ?? null,
+        discountType: req.body.discountType || null,
+        discountValue: req.body.discountValue ?? null,
         favourite: Boolean(req.body.favourite)
       }
     }));
@@ -154,6 +156,8 @@ export const registerInventoryRoutes = (ownerRouter) => {
         unit: req.body.unit !== undefined ? req.body.unit : product.unit,
         secondaryUnit: req.body.secondaryUnit !== undefined ? req.body.secondaryUnit : product.secondaryUnit,
         unitConversion: req.body.unitConversion !== undefined ? req.body.unitConversion : product.unitConversion,
+        discountType: req.body.discountType !== undefined ? req.body.discountType : product.discountType,
+        discountValue: req.body.discountValue !== undefined ? req.body.discountValue : product.discountValue,
         favourite: req.body.favourite !== undefined ? Boolean(req.body.favourite) : product.favourite
       }
     }));

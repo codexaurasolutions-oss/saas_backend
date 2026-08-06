@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "./prisma.js";
-import { createStockMovement, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, refreshCustomerInsights, toAmount } from "./phase2.js";
+import { convertToPrimaryUnit, createStockMovement, ensureScopedBranch, ensureScopedCustomer, ensureScopedService, ensureScopedStaffMembership, getSalonSetting, logCustomerTimeline, refreshCustomerInsights, toAmount } from "./phase2.js";
 import { calculateLoyaltyEarnPoints, getCustomerValidLoyaltyBalance, reverseInvoiceLoyalty } from "./phase4.js";
 
 const normalizeStatus = (paidAmount, total, refundAmount = 0, cancelled = false) => {
@@ -38,6 +38,11 @@ const ensureProduct = async (salonId, branchId, productId) => {
   if (!product) {
     const error = new Error("Product not found");
     error.status = 404;
+    throw error;
+  }
+  if (product.productType === "CONSUMABLE") {
+    const error = new Error("Consumable products cannot be sold directly. Use them as service consumables instead.");
+    error.status = 400;
     throw error;
   }
   if (branchId && product.branchId && product.branchId !== branchId) {
@@ -821,18 +826,19 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
           for (const cons of matchedConsumables.length > 0 ? matchedConsumables : svc.consumables.filter(c => c.variation == null)) {
             const overrideKey = `${item.serviceId}:${cons.productId}`;
             const overrideQty = body.consumableOverrides?.[overrideKey];
-            const qtyToDeduct = overrideQty != null ? Number(overrideQty) : Number(cons.reqdQty);
-            if (qtyToDeduct > 0) {
+            const rawQty = overrideQty != null ? Number(overrideQty) : Number(cons.reqdQty);
+            const consumedPrimaryUnits = convertToPrimaryUnit(rawQty, cons.product?.netWeight);
+            if (consumedPrimaryUnits > 0) {
               await createStockMovement(tx, {
                 salonId,
                 branchId: body.branchId || null,
                 productId: cons.productId,
-                quantity: -qtyToDeduct * Number(item.qty || 1),
+                quantity: -consumedPrimaryUnits * Number(item.qty || 1),
                 movementType: "CONSUMABLE_USAGE",
                 createdByUserId: actorUser.id,
                 referenceType: "INVOICE",
                 referenceId: invoice.id,
-                note: overrideQty != null ? `Override: ${overrideQty} ${cons.product?.unit || ""} (default: ${cons.reqdQty})` : null,
+                note: overrideQty != null ? `Override: ${rawQty} ${cons.product?.secondaryUnit || cons.product?.unit || ""} (default: ${cons.reqdQty})` : null,
                 allowNegativeStock: false
               });
             }
@@ -841,11 +847,13 @@ export const createPosInvoice = async ({ salonId, actorUser, body }) => {
         if (Array.isArray(item.consumableItems) && item.consumableItems.length > 0) {
           for (const ci of item.consumableItems) {
             if (ci.productId && Number(ci.qty) > 0) {
+              const ciProduct = await tx.product.findUnique({ where: { id: ci.productId } });
+              const consumedPrimaryUnits = convertToPrimaryUnit(ci.qty, ciProduct?.netWeight);
               await createStockMovement(tx, {
                 salonId,
                 branchId: body.branchId || null,
                 productId: ci.productId,
-                quantity: -Number(ci.qty) * Number(item.qty || 1),
+                quantity: -consumedPrimaryUnits * Number(item.qty || 1),
                 movementType: "CONSUMABLE_USAGE",
                 createdByUserId: actorUser.id,
                 referenceType: "INVOICE",
@@ -1229,6 +1237,46 @@ export const refundInvoice = async ({ salonId, invoiceId, amount, note, actorUse
           referenceType: "REFUND",
           referenceId: invoice.id
         });
+      } else if (item.itemType === "SERVICE" && item.serviceId) {
+        const svc = await tx.service.findUnique({ where: { id: item.serviceId }, include: { consumables: { include: { product: true } } } });
+        if (svc && svc.consumables && svc.consumables.length > 0) {
+          const serviceVariation = item.variation || null;
+          const matchedConsumables = svc.consumables.filter(c => c.variation === serviceVariation || (serviceVariation == null && c.variation == null));
+          for (const cons of matchedConsumables.length > 0 ? matchedConsumables : svc.consumables.filter(c => c.variation == null)) {
+            const consumedPrimaryUnits = convertToPrimaryUnit(cons.reqdQty, cons.product?.netWeight);
+            if (consumedPrimaryUnits > 0) {
+              await createStockMovement(tx, {
+                salonId,
+                branchId: invoice.branchId,
+                productId: cons.productId,
+                quantity: consumedPrimaryUnits * Number(item.qty || 1),
+                movementType: "PRODUCT_RETURN",
+                createdByUserId: actorUser.id,
+                referenceType: "REFUND",
+                referenceId: invoice.id,
+                note: `Consumable return on refund: ${cons.product?.name || ""} (${consumedPrimaryUnits} ${cons.product?.unit || ""})`
+              });
+            }
+          }
+        }
+        const customConsumables = Array.isArray(item.consumableData) ? item.consumableData : [];
+        for (const ci of customConsumables) {
+          if (ci.productId && Number(ci.qty) > 0) {
+            const ciProduct = await tx.product.findUnique({ where: { id: ci.productId } });
+            const consumedPrimaryUnits = convertToPrimaryUnit(ci.qty, ciProduct?.netWeight);
+            await createStockMovement(tx, {
+              salonId,
+              branchId: invoice.branchId,
+              productId: ci.productId,
+              quantity: consumedPrimaryUnits * Number(item.qty || 1),
+              movementType: "PRODUCT_RETURN",
+              createdByUserId: actorUser.id,
+              referenceType: "REFUND",
+              referenceId: invoice.id,
+              note: `Custom consumable return on refund: ${ci.name || ""}`
+            });
+          }
+        }
       }
     }
 
