@@ -28,7 +28,7 @@ export async function calculateDailyMetrics(salonId, date = new Date()) {
       where: { salonId, status: "PAID", createdAt: { gte: startOfDay, lte: endOfDay } }
     }),
     prisma.invoice.count({
-      where: { salonId, createdAt: { gte: startOfDay, lte: endOfDay } }
+      where: { salonId, status: "PAID", createdAt: { gte: startOfDay, lte: endOfDay } }
     }),
     prisma.appointment.count({
       where: { salonId, startAt: { gte: startOfDay, lte: endOfDay } }
@@ -96,7 +96,7 @@ export async function calculateWeeklyMetrics(salonId, date = new Date()) {
       where: { salonId, status: "PAID", createdAt: { gte: prevStartOfWeek, lte: prevEndOfWeek } }
     }),
     prisma.invoice.count({
-      where: { salonId, createdAt: { gte: startOfWeek, lte: endOfWeek } }
+      where: { salonId, status: "PAID", createdAt: { gte: startOfWeek, lte: endOfWeek } }
     }),
     prisma.appointment.count({
       where: { salonId, startAt: { gte: startOfWeek, lte: endOfWeek } }
