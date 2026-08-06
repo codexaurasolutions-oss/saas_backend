@@ -218,7 +218,7 @@ export function buildDailyDigestHtml({ ownerName, metrics }) {
 
             <!-- Detailed Breakdown Table -->
             <div style="background: #f8fafc; border-radius: 16px; border: 1px solid #e2e8f0; padding: 24px; margin-bottom: 28px;">
-              <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 1px;">📊 Operations & Customer Activity</h3>
+              <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 1px;">Operations & Customer Activity</h3>
               
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size: 14px;">
                 <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -325,7 +325,7 @@ export function buildWeeklyDigestHtml({ ownerName, metrics }) {
 
             <!-- Detailed Breakdown Table -->
             <div style="background: #f8fafc; border-radius: 16px; border: 1px solid #e2e8f0; padding: 24px; margin-bottom: 28px;">
-              <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 1px;">📈 7-Day Performance Metrics</h3>
+              <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 1px;">7-Day Performance Metrics</h3>
               
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size: 14px;">
                 <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -399,7 +399,7 @@ export async function sendDailyDigestForSalon(salonId, overrideOwnerEmail = null
     try {
       await sendMail({
         to: recipientEmail,
-        subject: `📊 Executive Daily Report (${metrics.dateStr}): ${metrics.salon?.name || "Salon Performance"}`,
+        subject: `Executive Daily Report (${metrics.dateStr}): ${metrics.salon?.name || "Salon Performance"}`,
         html
       });
       results.push({ email: recipientEmail, success: true });
@@ -433,7 +433,7 @@ export async function sendWeeklyDigestForSalon(salonId, overrideOwnerEmail = nul
     try {
       await sendMail({
         to: recipientEmail,
-        subject: `📈 Executive Weekly Report (${metrics.startDateStr} - ${metrics.endDateStr}): ${metrics.salon?.name || "Salon Performance"}`,
+        subject: `Executive Weekly Report (${metrics.startDateStr} - ${metrics.endDateStr}): ${metrics.salon?.name || "Salon Performance"}`,
         html
       });
       results.push({ email: recipientEmail, success: true });

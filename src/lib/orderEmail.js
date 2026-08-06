@@ -56,11 +56,11 @@ const buildOrderConfirmationHtml = ({ order, salon, siteUrl }) => {
 
           <!-- HEADER -->
           <tr>
-            <td style="background:linear-gradient(135deg,#111111 0%,#2d2d2d 100%);padding:40px 40px 32px;border-radius:16px 16px 0 0;text-align:center;">
+            <td style="background:linear-gradient(135deg,#111827 0%,#1f2937 50%,#374151 100%);padding:40px 40px 32px;border-radius:16px 16px 0 0;text-align:center;">
               <h1 style="margin:0 0 4px;font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">
                 ${salon.name || "Your Salon"}
               </h1>
-              <p style="margin:0;font-size:13px;color:#9ca3af;letter-spacing:1px;text-transform:uppercase;">Order Confirmation</p>
+              <p style="margin:0;font-size:13px;color:#c8a97e;letter-spacing:1px;text-transform:uppercase;">Order Confirmation</p>
             </td>
           </tr>
 
@@ -81,7 +81,7 @@ const buildOrderConfirmationHtml = ({ order, salon, siteUrl }) => {
 
               <!-- Customer Greeting -->
               <p style="margin:0 0 24px;font-size:16px;color:#374151;">
-                Hi <strong>${order.customerName || "Valued Customer"}</strong>, thank you for your order! 🎉
+                Hi <strong>${order.customerName || "Valued Customer"}</strong>, thank you for your order!
               </p>
 
               <!-- Order Meta Info -->
@@ -90,26 +90,26 @@ const buildOrderConfirmationHtml = ({ order, salon, siteUrl }) => {
                   <td style="padding:6px 0;">
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
-                        <td style="font-size:13px;color:#6b7280;width:50%;padding:4px 0;">📦 Order Number</td>
+                        <td style="font-size:13px;color:#6b7280;width:50%;padding:4px 0;">Order Number</td>
                         <td style="font-size:13px;color:#111827;font-weight:700;text-align:right;padding:4px 0;">${order.orderNumber}</td>
                       </tr>
                       <tr>
-                        <td style="font-size:13px;color:#6b7280;padding:4px 0;">📅 Order Date</td>
+                        <td style="font-size:13px;color:#6b7280;padding:4px 0;">Order Date</td>
                         <td style="font-size:13px;color:#111827;text-align:right;padding:4px 0;">${orderDate}</td>
                       </tr>
                       <tr>
-                        <td style="font-size:13px;color:#6b7280;padding:4px 0;">🚚 Fulfillment</td>
+                        <td style="font-size:13px;color:#6b7280;padding:4px 0;">Fulfillment</td>
                         <td style="font-size:13px;color:#111827;text-align:right;padding:4px 0;">${fulfillmentText}</td>
                       </tr>
                       <tr>
-                        <td style="font-size:13px;color:#6b7280;padding:4px 0;">💳 Payment</td>
+                        <td style="font-size:13px;color:#6b7280;padding:4px 0;">Payment</td>
                         <td style="text-align:right;padding:4px 0;">
                           <span style="background:${paymentBadge.color}22;color:${paymentBadge.color};padding:2px 10px;border-radius:100px;font-size:12px;font-weight:600;">${paymentBadge.text}</span>
                         </td>
                       </tr>
                       ${order.deliveryAddress ? `
                       <tr>
-                        <td style="font-size:13px;color:#6b7280;padding:4px 0;vertical-align:top;">📍 Delivery Address</td>
+                        <td style="font-size:13px;color:#6b7280;padding:4px 0;vertical-align:top;">Delivery Address</td>
                         <td style="font-size:13px;color:#111827;text-align:right;padding:4px 0;">${order.deliveryAddress}</td>
                       </tr>` : ""}
                     </table>
@@ -154,8 +154,8 @@ const buildOrderConfirmationHtml = ({ order, salon, siteUrl }) => {
               </table>
 
               <!-- What's Next -->
-              <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin-top:28px;border-left:4px solid #10b981;">
-                <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#065f46;">What happens next?</p>
+              <div style="background:#faf6f0;border-radius:12px;padding:20px;margin-top:28px;border-left:4px solid #c8a97e;">
+                <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#92400e;">What happens next?</p>
                 <ul style="margin:0;padding-left:20px;color:#374151;font-size:13px;line-height:2;">
                   <li>Our team will review and confirm your order shortly.</li>
                   <li>You'll receive updates as your order progresses.</li>
@@ -178,11 +178,11 @@ const buildOrderConfirmationHtml = ({ order, salon, siteUrl }) => {
 
           <!-- FOOTER -->
           <tr>
-            <td style="background:#111111;padding:24px 40px;border-radius:0 0 16px 16px;text-align:center;">
+            <td style="background:#111827;padding:24px 40px;border-radius:0 0 16px 16px;text-align:center;">
               <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#ffffff;">${salon.name || "Your Salon"}</p>
-              ${salon.phone ? `<p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">📞 ${salon.phone}</p>` : ""}
-              ${salon.email ? `<p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">✉️ ${salon.email}</p>` : ""}
-              ${salon.address ? `<p style="margin:0 0 12px;font-size:13px;color:#9ca3af;">📍 ${salon.address}</p>` : ""}
+              ${salon.phone ? `<p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">${salon.phone}</p>` : ""}
+              ${salon.email ? `<p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">${salon.email}</p>` : ""}
+              ${salon.address ? `<p style="margin:0 0 12px;font-size:13px;color:#9ca3af;">${salon.address}</p>` : ""}
               <p style="margin:0;font-size:11px;color:#4b5563;">
                 This is an automated confirmation email. Please do not reply directly to this email.
               </p>
@@ -216,7 +216,7 @@ export const sendOrderConfirmationEmail = async ({ order, salonId }) => {
 
     const result = await sendMail({
       to: order.customerEmail,
-      subject: `✅ Order Confirmed – #${order.orderNumber} | ${salon.name}`,
+      subject: `Order Confirmed - #${order.orderNumber} | ${salon.name}`,
       html,
     });
 
