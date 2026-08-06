@@ -36,9 +36,9 @@ const createTransporter = () => {
     const isZoho = (process.env.SMTP_HOST || "").toLowerCase().includes("zoho");
     if (isZoho) {
       return nodemailer.createTransport({
-        host: "smtppro.zoho.in",
-        port: 465,
-        secure: true,
+        host: process.env.SMTP_HOST || "smtp.zoho.in",
+        port: Number(process.env.SMTP_PORT) || 465,
+        secure: process.env.SMTP_SECURE !== "false",
         connectionTimeout: 20000,
         greetingTimeout: 20000,
         socketTimeout: SEND_TIMEOUT_MS,
