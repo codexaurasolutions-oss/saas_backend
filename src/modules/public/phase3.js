@@ -205,11 +205,13 @@ export const registerPublicPhase3Routes = (publicRouter) => {
         }
       }
 
+      let isNewCustomer = false;
       let customer = await tx.customer.findFirst({ where: { salonId: salon.id, phone: customerPhone } });
       if (!customer) {
         customer = await tx.customer.create({
           data: { salonId: salon.id, name: customerName.trim(), phone: customerPhone.trim(), email: customerEmail || null, source: "ONLINE_BOOKING" }
         });
+        isNewCustomer = true;
       } else {
         const updates = {};
         if (customerName.trim() && customer.name !== customerName.trim()) updates.name = customerName.trim();
@@ -270,7 +272,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
         include: { items: true }
       });
 
-      return { order, appointment };
+      return { order, appointment, isNewCustomer, customerId: customer.id, customerEmail: customer.email, customerPhone: customer.phone };
     }).catch(err => {
       if (err.message === "STAFF_CONFLICT") return null;
       throw err;
@@ -289,6 +291,34 @@ export const registerPublicPhase3Routes = (publicRouter) => {
       templateName: "jaspers_market_order_confirmation_v1",
       templateParams: [customerName.trim(), orderNumber, `${preferredDate} ${preferredTime}`]
     }).catch(() => {});
+
+    // Send welcome email to new customers
+    if (result.isNewCustomer) {
+      try {
+        const { isOn, emailEnabled, whatsappEnabled } = await (await import("../../lib/emailAutomation.js")).getNotificationToggles(salon.id).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
+        if (isOn("welcomeEmail") && emailEnabled && result.customerEmail) {
+          const { attemptCustomerTemplateEmail } = await import("../../lib/emailNotifications.js");
+          await attemptCustomerTemplateEmail({
+            salonId: salon.id,
+            toEmail: result.customerEmail,
+            templateType: "welcome_email",
+            context: { customerId: result.customerId }
+          }).catch(() => {});
+        }
+        if (isOn("welcomeEmail") && whatsappEnabled && result.customerPhone) {
+          const { attemptCustomerTemplateWhatsApp } = await import("../../lib/emailNotifications.js");
+          await attemptCustomerTemplateWhatsApp({
+            salonId: salon.id,
+            toPhone: result.customerPhone,
+            templateType: "welcome_email",
+            context: { customerId: result.customerId },
+            customerId: result.customerId
+          }).catch(() => {});
+        }
+      } catch (welcomeErr) {
+        console.error("[storefront-book] Welcome email error:", welcomeErr.message);
+      }
+    }
 
     res.status(201).json({
       order: result.order,

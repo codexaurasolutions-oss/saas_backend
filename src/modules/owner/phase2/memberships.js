@@ -3,6 +3,8 @@ import { logCustomerTimeline, normalizeBranchId } from "../../../lib/phase2.js";
 import { createPosInvoice } from "../../../lib/pos.js";
 import { requireSalonPermission } from "../../../middlewares/rbac.js";
 import { schemas, validate } from "../../../middlewares/validate.js";
+import { attemptCustomerTemplateEmail, attemptCustomerTemplateWhatsApp } from "../../../lib/emailNotifications.js";
+import { getNotificationToggles } from "../../../lib/emailAutomation.js";
 
 export const registerMembershipRoutes = (ownerRouter) => {
   ownerRouter.get("/memberships/plans", requireSalonPermission("memberships", "view"), async (req, res) => {
@@ -198,6 +200,32 @@ export const registerMembershipRoutes = (ownerRouter) => {
         });
         // Link the invoice to the membership record
         await prisma.customerMembership.update({ where: { id: created.id }, data: { soldInvoiceId: invoice.id } });
+
+        // Send membership purchase email
+        try {
+          const { isOn, emailEnabled, whatsappEnabled } = await getNotificationToggles(req.salonId, branchId).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
+          const customer = await prisma.customer.findUnique({ where: { id: req.body.customerId }, select: { email: true, phone: true } });
+          if (isOn("membershipPurchase") && emailEnabled && customer?.email) {
+            await attemptCustomerTemplateEmail({
+              salonId: req.salonId,
+              toEmail: customer.email,
+              templateType: "membership_purchase_template",
+              context: { customerId: req.body.customerId, customerMembershipId: created.id, invoiceId: invoice.id }
+            }).catch(() => {});
+          }
+          if (isOn("membershipPurchase") && whatsappEnabled && customer?.phone) {
+            await attemptCustomerTemplateWhatsApp({
+              salonId: req.salonId,
+              toPhone: customer.phone,
+              templateType: "membership_purchase_template",
+              context: { customerId: req.body.customerId, customerMembershipId: created.id, invoiceId: invoice.id },
+              customerId: req.body.customerId,
+              branchId
+            }).catch(() => {});
+          }
+        } catch (notifyErr) {
+          console.error("[assign-membership] Membership purchase notification error:", notifyErr.message);
+        }
       } catch (invoiceErr) {
         console.error("[assign-membership] Invoice creation failed (non-blocking):", invoiceErr.message);
       }
@@ -530,6 +558,32 @@ export const registerMembershipRoutes = (ownerRouter) => {
         });
         // Link the invoice to the package record
         await prisma.customerPackage.update({ where: { id: created.id }, data: { soldInvoiceId: invoice.id } });
+
+        // Send package purchase email
+        try {
+          const { isOn, emailEnabled, whatsappEnabled } = await getNotificationToggles(req.salonId, branchId).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
+          const customer = await prisma.customer.findUnique({ where: { id: req.body.customerId }, select: { email: true, phone: true } });
+          if (isOn("packagePurchase") && emailEnabled && customer?.email) {
+            await attemptCustomerTemplateEmail({
+              salonId: req.salonId,
+              toEmail: customer.email,
+              templateType: "package_purchase_template",
+              context: { customerId: req.body.customerId, customerPackageId: created.id, invoiceId: invoice.id }
+            }).catch(() => {});
+          }
+          if (isOn("packagePurchase") && whatsappEnabled && customer?.phone) {
+            await attemptCustomerTemplateWhatsApp({
+              salonId: req.salonId,
+              toPhone: customer.phone,
+              templateType: "package_purchase_template",
+              context: { customerId: req.body.customerId, customerPackageId: created.id, invoiceId: invoice.id },
+              customerId: req.body.customerId,
+              branchId
+            }).catch(() => {});
+          }
+        } catch (notifyErr) {
+          console.error("[assign-package] Package purchase notification error:", notifyErr.message);
+        }
       } catch (invoiceErr) {
         console.error("[assign-package] Invoice creation failed (non-blocking):", invoiceErr.message);
       }

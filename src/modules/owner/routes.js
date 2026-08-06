@@ -1136,6 +1136,32 @@ ownerRouter.post("/customers", requireSalonPermission("customers", "create"), va
     console.error("[owner/customers] Referral code notification error (non-blocking):", referralErr.message);
   }
 
+  // ── Welcome email ────────────────────────────────────────────────────────
+  try {
+    const { isOn, emailEnabled, whatsappEnabled } = await (await import("../../lib/emailAutomation.js")).getNotificationToggles(req.salonId).catch(() => ({ isOn: () => true, emailEnabled: true, whatsappEnabled: false }));
+    if (isOn("welcomeEmail") && emailEnabled && customer.email) {
+      const { attemptCustomerTemplateEmail } = await import("../../lib/emailNotifications.js");
+      await attemptCustomerTemplateEmail({
+        salonId: req.salonId,
+        toEmail: customer.email,
+        templateType: "welcome_email",
+        context: { customerId: customer.id }
+      }).catch(() => {});
+    }
+    if (isOn("welcomeEmail") && whatsappEnabled && customer.phone) {
+      const { attemptCustomerTemplateWhatsApp } = await import("../../lib/emailNotifications.js");
+      await attemptCustomerTemplateWhatsApp({
+        salonId: req.salonId,
+        toPhone: customer.phone,
+        templateType: "welcome_email",
+        context: { customerId: customer.id },
+        customerId: customer.id
+      }).catch(() => {});
+    }
+  } catch (welcomeErr) {
+    console.error("[owner/customers] Welcome email error (non-blocking):", welcomeErr.message);
+  }
+
   res.status(201).json(customer);
 });
 ownerRouter.patch("/customers/:id", requireSalonPermission("customers", "edit"), validate(schemas.customerPatch), updateCustomerHandler);

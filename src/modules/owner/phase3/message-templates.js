@@ -143,6 +143,11 @@ const defaultTemplates = {
     title: "Gift Card Used - {{salon_name}}",
     content: "Hi {{customer_name}},\n\nYour gift card ({{gift_card_code}}) was used for {{amount_used}} at {{salon_name}}.\nRemaining balance: {{balance_amount}}\n\nThank you!\n\n- {{salon_name}} Team",
     variables: ["customer_name", "salon_name", "gift_card_code", "amount_used", "balance_amount"]
+  },
+  welcome_email: {
+    title: "Welcome to {{salon_name}}!",
+    content: "Hi {{customer_name}},\n\nWelcome to {{salon_name}}! We're thrilled to have you.\n\nHere's what you can do:\n- Book appointments online\n- View your invoices and history\n- Earn loyalty points on every visit\n- Get exclusive offers and updates\n\nIf you have any questions, feel free to reach out to us.\n\nWe look forward to seeing you!\n\n- {{salon_name}} Team",
+    variables: ["customer_name", "salon_name"]
   }
 };
 

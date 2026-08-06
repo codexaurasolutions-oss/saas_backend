@@ -105,6 +105,10 @@ const fallbackTemplates = {
   referrer_reward_sms: {
     title: "Referral Reward Received! 🎉 - {{salon_name}}",
     content: "Hi {{customer_name}},\n\nGreat news! You earned {{points_earned}} loyalty points at {{salon_name}} for referring a friend! 🎉\nNew balance: {{new_balance}} points.\n\nKeep sharing and keep earning!\n\n- {{salon_name}} Team"
+  },
+  welcome_email: {
+    title: "Welcome to {{salon_name}}! 🎉",
+    content: "Hi {{customer_name}},\n\nWelcome to {{salon_name}}! We're thrilled to have you.\n\nHere's what you can do:\n- Book appointments online\n- View your invoices and history\n- Earn loyalty points on every visit\n- Get exclusive offers and updates\n\nIf you have any questions, feel free to reach out to us.\n\nWe look forward to seeing you!\n\n- {{salon_name}} Team"
   }
 };
 
