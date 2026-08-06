@@ -108,6 +108,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
         width: req.body.width ?? null,
         height: req.body.height ?? null,
         unit: req.body.unit || null,
+        secondaryUnit: req.body.secondaryUnit || null,
         unitConversion: req.body.unitConversion ?? null,
         favourite: Boolean(req.body.favourite)
       }
@@ -151,6 +152,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
         width: req.body.width !== undefined ? req.body.width : product.width,
         height: req.body.height !== undefined ? req.body.height : product.height,
         unit: req.body.unit !== undefined ? req.body.unit : product.unit,
+        secondaryUnit: req.body.secondaryUnit !== undefined ? req.body.secondaryUnit : product.secondaryUnit,
         unitConversion: req.body.unitConversion !== undefined ? req.body.unitConversion : product.unitConversion,
         favourite: req.body.favourite !== undefined ? Boolean(req.body.favourite) : product.favourite
       }
@@ -167,7 +169,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
     const product = await prisma.product.findFirst({ where: { id: req.params.id, salonId: req.salonId } });
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    const { currentStock, minStock, onFloor, netWeight, unit, productType } = req.body;
+    const { currentStock, minStock, onFloor, netWeight, unit, secondaryUnit, productType } = req.body;
 
     const data = {};
     if (currentStock !== undefined) {
@@ -203,6 +205,7 @@ export const registerInventoryRoutes = (ownerRouter) => {
       data.netWeight = netWeight !== null ? Number(netWeight) : null;
     }
     if (unit !== undefined) data.unit = unit || null;
+    if (secondaryUnit !== undefined) data.secondaryUnit = secondaryUnit || null;
     if (productType !== undefined && ["RETAIL", "CONSUMABLE"].includes(productType)) data.productType = productType;
 
     if (Object.keys(data).length === 0) return res.status(400).json({ message: "No fields to update" });
