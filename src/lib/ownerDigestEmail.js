@@ -168,20 +168,20 @@ export function buildDailyDigestHtml({ ownerName, metrics }) {
         <div style="max-width: 650px; width: 100%; background: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 20px 40px rgba(15,23,42,0.08);">
           
           <!-- PDF Report Style Header -->
-          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%); padding: 40px 36px; color: #ffffff; position: relative;">
+          <div style="background: linear-gradient(135deg, #111827 0%, #1f2937 50%, #374151 100%); padding: 40px 36px; color: #ffffff; position: relative;">
             <table role="presentation" width="100%">
               <tr>
                 <td>
-                  <span style="display: inline-block; background: rgba(99,102,241,0.25); border: 1px solid rgba(165,180,252,0.4); color: #c7d2fe; padding: 6px 14px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">
+                  <span style="display: inline-block; background: rgba(200,169,126,0.25); border: 1px solid rgba(200,169,126,0.5); color: #f5e6d0; padding: 6px 14px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">
                     EXECUTIVE DAILY REPORT
                   </span>
                   <h1 style="margin: 0 0 6px; font-size: 26px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">${salon?.name || "SalonNest Partner"}</h1>
-                  <p style="margin: 0; font-size: 14px; color: #94a3b8; font-weight: 500;">Period: ${dateStr}</p>
+                  <p style="margin: 0; font-size: 14px; color: #c8a97e; font-weight: 500;">Period: ${dateStr}</p>
                 </td>
                 <td align="right" valign="top">
                   <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); text-align: right;">
-                    <span style="display: block; font-size: 10px; color: #cbd5e1; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Platform</span>
-                    <span style="font-size: 16px; font-weight: 900; color: #38bdf8;">SalonNest ERP</span>
+                    <span style="display: block; font-size: 10px; color: #c8a97e; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Platform</span>
+                    <span style="font-size: 16px; font-weight: 900; color: #c8a97e;">SalonNest ERP</span>
                   </div>
                 </td>
               </tr>
@@ -242,7 +242,7 @@ export function buildDailyDigestHtml({ ownerName, metrics }) {
 
             <!-- CTA Portal Button -->
             <div style="text-align: center; margin: 36px 0 16px;">
-              <a href="${frontendUrl}/admin/dashboard" target="_blank" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 8px 20px rgba(79,70,229,0.3);">
+              <a href="${frontendUrl}/admin/dashboard" target="_blank" style="background: linear-gradient(135deg, #c8a97e 0%, #b8956a 100%); color: #ffffff; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 8px 20px rgba(200,169,126,0.3);">
                 Access SalonNest Owner Panel →
               </a>
             </div>
@@ -287,20 +287,20 @@ export function buildWeeklyDigestHtml({ ownerName, metrics }) {
         <div style="max-width: 650px; width: 100%; background: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 20px 40px rgba(15,23,42,0.08);">
           
           <!-- PDF Report Style Header -->
-          <div style="background: linear-gradient(135deg, #065f46 0%, #047857 50%, #0f172a 100%); padding: 40px 36px; color: #ffffff;">
+          <div style="background: linear-gradient(135deg, #111827 0%, #1f2937 50%, #374151 100%); padding: 40px 36px; color: #ffffff;">
             <table role="presentation" width="100%">
               <tr>
                 <td>
-                  <span style="display: inline-block; background: rgba(52,211,153,0.25); border: 1px solid rgba(167,243,208,0.4); color: #a7f3d0; padding: 6px 14px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">
+                  <span style="display: inline-block; background: rgba(200,169,126,0.25); border: 1px solid rgba(200,169,126,0.5); color: #f5e6d0; padding: 6px 14px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">
                     EXECUTIVE WEEKLY REPORT
                   </span>
                   <h1 style="margin: 0 0 6px; font-size: 26px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">${salon?.name || "SalonNest Partner"}</h1>
-                  <p style="margin: 0; font-size: 14px; color: #a7f3d0; font-weight: 500;">7-Day Cycle: ${startDateStr} – ${endDateStr}</p>
+                  <p style="margin: 0; font-size: 14px; color: #c8a97e; font-weight: 500;">7-Day Cycle: ${startDateStr} – ${endDateStr}</p>
                 </td>
                 <td align="right" valign="top">
                   <div style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); text-align: right;">
-                    <span style="display: block; font-size: 10px; color: #a7f3d0; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Platform</span>
-                    <span style="font-size: 16px; font-weight: 900; color: #34d399;">SalonNest ERP</span>
+                    <span style="display: block; font-size: 10px; color: #c8a97e; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Platform</span>
+                    <span style="font-size: 16px; font-weight: 900; color: #c8a97e;">SalonNest ERP</span>
                   </div>
                 </td>
               </tr>
@@ -357,7 +357,7 @@ export function buildWeeklyDigestHtml({ ownerName, metrics }) {
 
             <!-- CTA Portal Button -->
             <div style="text-align: center; margin: 36px 0 16px;">
-              <a href="${frontendUrl}/admin/dashboard" target="_blank" style="background: linear-gradient(135deg, #059669 0%, #0d9488 100%); color: #ffffff; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 8px 20px rgba(5,150,105,0.3);">
+              <a href="${frontendUrl}/admin/dashboard" target="_blank" style="background: linear-gradient(135deg, #c8a97e 0%, #b8956a 100%); color: #ffffff; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 8px 20px rgba(200,169,126,0.3);">
                 View Full Analytics & Reports →
               </a>
             </div>

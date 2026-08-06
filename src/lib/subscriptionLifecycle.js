@@ -32,13 +32,13 @@ export const buildTrialReminderEmail = ({ ownerName, salonName, endsAt, loginLin
   const html = `
     <div style="font-family:Arial,sans-serif;background:#f7f4ef;padding:32px;color:#18212c;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#c2410c;margin:0 0 12px;">Subscription Expiry Alert</p>
-        <h1 style="margin:0 0 14px;font-size:26px;line-height:1.15;color:#c2410c;">Your subscription expires in ${daysLeft} days.</h1>
+        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#c8a97e;margin:0 0 12px;">Subscription Expiry Alert</p>
+        <h1 style="margin:0 0 14px;font-size:26px;line-height:1.15;color:#c8a97e;">Your subscription expires in ${daysLeft} days.</h1>
         <p style="font-size:16px;line-height:1.7;margin:0 0 18px;">Hi ${ownerName},</p>
         <p style="font-size:16px;line-height:1.7;margin:0 0 18px;">This is an automated reminder that your active subscription for <strong>${salonName}</strong> will expire on <strong>${formatDate(endsAt)}</strong>.</p>
-        <div style="background:#fff7ed;border-radius:18px;padding:18px 20px;margin:0 0 20px;border-left:4px solid #c2410c;">
+        <div style="background:#faf6f0;border-radius:18px;padding:18px 20px;margin:0 0 20px;border-left:4px solid #c8a97e;">
           <p style="margin:0 0 8px;"><strong>Expiry Date:</strong> ${formatDate(endsAt)}</p>
-          <p style="margin:0;"><strong>Manage Subscription:</strong> <a href="${loginLink}" style="color:#0f766e;font-weight:bold;text-decoration:underline;">Login to Panel</a></p>
+          <p style="margin:0;"><strong>Manage Subscription:</strong> <a href="${loginLink}" style="color:#c8a97e;font-weight:bold;text-decoration:underline;">Login to Panel</a></p>
         </div>
         <p style="margin:0;color:#516170;line-height:1.7;">Please ensure your payment methods are updated to avoid any service disruptions.</p>
       </div>
@@ -64,12 +64,12 @@ export const buildConversionEmail = ({ ownerName, salonName, planName, endsAt, l
   const html = `
     <div style="font-family:Arial,sans-serif;background:#f7f4ef;padding:32px;color:#18212c;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">Subscription Active</p>
+        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#c8a97e;margin:0 0 12px;">Subscription Active</p>
         <h1 style="margin:0 0 14px;font-size:30px;line-height:1.15;">Your subscription has been upgraded successfully.</h1>
         <p style="font-size:16px;line-height:1.7;margin:0 0 18px;">Hi ${ownerName}, <strong>${salonName}</strong> is now active on the <strong>${planName}</strong> plan.</p>
-        <div style="background:#ecfeff;border-radius:18px;padding:18px 20px;margin:0 0 20px;">
+        <div style="background:#faf6f0;border-radius:18px;padding:18px 20px;margin:0 0 20px;">
           <p style="margin:0 0 8px;"><strong>Active until:</strong> ${formatDate(endsAt)}</p>
-          <p style="margin:0;"><a href="${loginLink}" style="color:#0f766e;">Open login page</a></p>
+          <p style="margin:0;"><a href="${loginLink}" style="color:#c8a97e;">Open login page</a></p>
         </div>
       </div>
     </div>

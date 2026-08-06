@@ -51,13 +51,13 @@ export const buildInviteEmail = ({ ownerName, salonName, inviteLink, loginLink }
   const html = `
     <div style="font-family:Arial,sans-serif;background:#f7f4ef;padding:32px;color:#18212c;">
       <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid rgba(24,33,44,0.08);">
-        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;margin:0 0 12px;">SalonNest Subscription Activated</p>
+        <p style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#c8a97e;margin:0 0 12px;">SalonNest Subscription Activated</p>
         <h1 style="margin:0 0 14px;font-size:32px;line-height:1.15;">Your ${salonName} workspace is ready.</h1>
         <p style="font-size:16px;line-height:1.7;margin:0 0 20px;">Hi ${ownerName}, your subscription has been activated and your workspace has been created. Set your password using the secure link below and then access your panel with your account email.</p>
-        <p style="margin:0 0 18px;"><a href="${inviteLink}" style="display:inline-block;background:linear-gradient(135deg,#c2410c,#0f766e);color:#fff;text-decoration:none;padding:14px 20px;border-radius:999px;font-weight:700;">Set your password</a></p>
+        <p style="margin:0 0 18px;"><a href="${inviteLink}" style="display:inline-block;background:linear-gradient(135deg,#c8a97e,#b8956a);color:#fff;text-decoration:none;padding:14px 20px;border-radius:999px;font-weight:700;">Set your password</a></p>
         <p style="font-size:14px;line-height:1.7;margin:0 0 12px;">After setting the password, open your login page here:</p>
-        <p style="margin:0 0 16px;"><a href="${loginLink}" style="color:#0f766e;">${loginLink}</a></p>
-        <p style="font-size:13px;color:#516170;line-height:1.7;margin:0;">If the button does not open, copy this direct password-setup link:<br /><a href="${inviteLink}" style="color:#0f766e;">${inviteLink}</a></p>
+        <p style="margin:0 0 16px;"><a href="${loginLink}" style="color:#c8a97e;">${loginLink}</a></p>
+        <p style="font-size:13px;color:#516170;line-height:1.7;margin:0;">If the button does not open, copy this direct password-setup link:<br /><a href="${inviteLink}" style="color:#c8a97e;">${inviteLink}</a></p>
       </div>
     </div>
   `;
