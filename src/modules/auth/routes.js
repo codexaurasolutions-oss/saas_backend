@@ -187,11 +187,34 @@ authRouter.post("/login", validate(schemas.login), async (req, res) => {
       to: user.email,
       subject: "Your SalonNest Login OTP",
       html: `
-        <div style="font-family: sans-serif; padding: 20px;">
-          <h2>SalonNest Login Verification</h2>
-          <p>Your OTP for logging in is: <strong style="font-size: 24px;">${otp}</strong></p>
-          <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
+        <!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+        <table width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;padding:40px 20px;"><tr><td align="center">
+        <div style="max-width:480px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #e2e8f0;">
+          <div style="background:linear-gradient(135deg,#111827 0%,#1f2937 50%,#374151 100%);padding:36px;text-align:center;">
+            <h1 style="margin:0 0 4px;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">SalonNest</h1>
+            <p style="margin:0;font-size:12px;color:#c8a97e;letter-spacing:1.5px;text-transform:uppercase;">Login Verification</p>
+          </div>
+          <div style="padding:36px;text-align:center;">
+            <p style="margin:0 0 8px;font-size:15px;color:#374151;">Hi,</p>
+            <p style="margin:0 0 28px;font-size:14px;color:#6b7280;line-height:1.6;">Use the following OTP to complete your login:</p>
+            <div style="background:#faf6f0;border:2px dashed #c8a97e;border-radius:16px;padding:24px;margin:0 0 28px;">
+              <p style="margin:0 0 8px;font-size:11px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Your One-Time Password</p>
+              <p style="margin:0;font-size:40px;font-weight:900;color:#111827;letter-spacing:8px;font-family:monospace;">${otp}</p>
+            </div>
+            <div style="background:#fef3c7;border-radius:12px;padding:14px 18px;margin:0 0 24px;">
+              <p style="margin:0;font-size:13px;color:#92400e;line-height:1.5;">
+                <strong>⏰ Valid for 10 minutes</strong><br>
+                Do not share this code with anyone.
+              </p>
+            </div>
+            <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">If you didn't request this login, please ignore this email or contact support.</p>
+          </div>
+          <div style="background:#111827;padding:20px;text-align:center;border-radius:0 0 20px 20px;">
+            <p style="margin:0;font-size:12px;color:#6b7280;">SalonNest ERP &mdash; Automated Security Email</p>
+          </div>
         </div>
+        </td></tr></table>
+        </body></html>
       `
     }).catch(err => console.error("[Login OTP Email Error]", err));
 
@@ -256,11 +279,34 @@ authRouter.post("/resend-otp", async (req, res) => {
       to: user.email,
       subject: "Your SalonNest Login OTP",
       html: `
-        <div style="font-family: sans-serif; padding: 20px;">
-          <h2>SalonNest Login Verification</h2>
-          <p>Your new OTP for logging in is: <strong style="font-size: 24px;">${otp}</strong></p>
-          <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
+        <!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+        <table width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;padding:40px 20px;"><tr><td align="center">
+        <div style="max-width:480px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #e2e8f0;">
+          <div style="background:linear-gradient(135deg,#111827 0%,#1f2937 50%,#374151 100%);padding:36px;text-align:center;">
+            <h1 style="margin:0 0 4px;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">SalonNest</h1>
+            <p style="margin:0;font-size:12px;color:#c8a97e;letter-spacing:1.5px;text-transform:uppercase;">Login Verification</p>
+          </div>
+          <div style="padding:36px;text-align:center;">
+            <p style="margin:0 0 8px;font-size:15px;color:#374151;">Hi,</p>
+            <p style="margin:0 0 28px;font-size:14px;color:#6b7280;line-height:1.6;">Use the following OTP to complete your login:</p>
+            <div style="background:#faf6f0;border:2px dashed #c8a97e;border-radius:16px;padding:24px;margin:0 0 28px;">
+              <p style="margin:0 0 8px;font-size:11px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Your One-Time Password</p>
+              <p style="margin:0;font-size:40px;font-weight:900;color:#111827;letter-spacing:8px;font-family:monospace;">${otp}</p>
+            </div>
+            <div style="background:#fef3c7;border-radius:12px;padding:14px 18px;margin:0 0 24px;">
+              <p style="margin:0;font-size:13px;color:#92400e;line-height:1.5;">
+                <strong>⏰ Valid for 10 minutes</strong><br>
+                Do not share this code with anyone.
+              </p>
+            </div>
+            <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">If you didn't request this login, please ignore this email or contact support.</p>
+          </div>
+          <div style="background:#111827;padding:20px;text-align:center;border-radius:0 0 20px 20px;">
+            <p style="margin:0;font-size:12px;color:#6b7280;">SalonNest ERP &mdash; Automated Security Email</p>
+          </div>
         </div>
+        </td></tr></table>
+        </body></html>
       `
     });
 
