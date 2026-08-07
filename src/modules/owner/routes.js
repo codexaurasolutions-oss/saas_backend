@@ -8,6 +8,11 @@ import { requireAuth, requireMaintenanceAccess, requireSalonContext, requireSalo
 import { schemas, validate } from "../../middlewares/validate.js";
 import multer from "multer";
 
+const INDIA_BOUNDS = { minLat: 6.5, maxLat: 37.5, minLng: 68.0, maxLng: 97.5 };
+const isInsideIndia = (lat, lng) =>
+  lat >= INDIA_BOUNDS.minLat && lat <= INDIA_BOUNDS.maxLat &&
+  lng >= INDIA_BOUNDS.minLng && lng <= INDIA_BOUNDS.maxLng;
+
 import { registerPhase2OwnerRoutes } from "./phase2/index.js";
 import { registerPhase3OwnerRoutes } from "./phase3/index.js";
 import { registerPhase4OwnerRoutes } from "./phase4/index.js";
@@ -434,6 +439,15 @@ ownerRouter.get("/branches", requireSalonPermission("branches", "view"), async (
 ownerRouter.post("/branches", requireSalonPermission("branches", "create"), async (req, res) => {
   const { name, phone, email, address, businessHours, weeklyOff, latitude, longitude, geofenceRadiusMeters } = req.body;
   if (!name) return res.status(400).json({ message: "Branch name is required" });
+
+  if (latitude != null && longitude != null) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && !isInsideIndia(lat, lng)) {
+      return res.status(400).json({ message: "Coordinates are outside India. Please select a location within India for accurate staff attendance geofencing." });
+    }
+  }
+
   const salonId = req.salonId;
 
   const branchCount = await prisma.branch.count({ where: { salonId } });
@@ -471,6 +485,15 @@ ownerRouter.patch("/branches/:id", requireSalonPermission("branches", "edit"), v
   try {
     const row = await findScoped("branch", req.salonId, req.params.id);
     if (!row) return res.status(404).json({ message: "Branch not found" });
+
+    if (req.body.latitude != null && req.body.longitude != null) {
+      const lat = Number(req.body.latitude);
+      const lng = Number(req.body.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && !isInsideIndia(lat, lng)) {
+        return res.status(400).json({ message: "Coordinates are outside India. Please select a location within India for accurate staff attendance geofencing." });
+      }
+    }
+
     res.json(await prisma.branch.update({ where: { id: req.params.id }, data: { ...req.body, email: req.body.email || null } }));
   } catch (err) {
     console.error("[BranchUpdate]", err);
