@@ -13,15 +13,26 @@ const razorpay = new Razorpay({
 export const creditsRouter = Router();
 
 
-// ─── Salon Owner: Get My Credits ───────────────────────────────────
-creditsRouter.get("/my-credits", requireAuth, asyncHandler(async (req, res) => {
+// ─── Salon Owner: Get Active Credit Packages ─────────────────────────
+creditsRouter.get("/packages", requireAuth, asyncHandler(async (req, res) => {
+  const packages = await prisma.creditPackage.findMany({
+    where: { isActive: true },
+    orderBy: { credits: "asc" }
+  });
+  // Transform priceInPaise to price for the frontend
+  res.json(packages.map(p => ({ ...p, price: p.priceInPaise / 100 })));
+}));
+
+// ─── Salon Owner: Get My Credits Balance ───────────────────────────
+creditsRouter.get("/balance", requireAuth, asyncHandler(async (req, res) => {
   const salonId = req.salonId || req.user?.salonId;
   if (!salonId) return res.status(400).json({ message: "No salon context" });
   const salon = await prisma.salon.findUnique({ where: { id: salonId }, select: { credits: true } });
   res.json({ credits: salon?.credits || 0 });
 }));
 
-creditsRouter.get("/my-transactions", requireAuth, asyncHandler(async (req, res) => {
+// ─── Salon Owner: Get My Transactions ──────────────────────────────
+creditsRouter.get("/transactions", requireAuth, asyncHandler(async (req, res) => {
   const salonId = req.salonId || req.user?.salonId;
   if (!salonId) return res.status(400).json({ message: "No salon context" });
   const transactions = await prisma.creditTransaction.findMany({
