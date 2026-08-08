@@ -547,6 +547,7 @@ export const registerMissingReportRoutes = (ownerRouter) => {
         grouped[key] = {
           product: m.product?.name || "Unknown",
           service: m.note || "General",
+          unit: m.product?.secondaryUnit || m.product?.unit || "-",
           qtyPerService: 0,
           totalUsed: 0,
           cost: 0
@@ -559,11 +560,12 @@ export const registerMissingReportRoutes = (ownerRouter) => {
     const mapped = Object.values(grouped).map((g, idx) => ({
       "Product": g.product,
       "Service": g.service,
+      "Unit": g.unit,
       "Qty Used Per Service": g.qtyPerService,
       "Total Used": g.totalUsed,
-      "Cost": g.cost
+      "Consumable Price": g.cost
     }));
-    res.json(appendTotalRow(mapped, "Product", "TOTAL", ["Qty Used Per Service", "Total Used", "Cost"]));
+    res.json(appendTotalRow(mapped, "Product", "TOTAL", ["Qty Used Per Service", "Total Used", "Consumable Price"]));
   });
 
   // ============ Total Consumed ============
@@ -584,8 +586,8 @@ export const registerMissingReportRoutes = (ownerRouter) => {
           totalQuantityPrimary: 0,
           value: 0,
           netWeight: Number(m.product?.netWeight || 1),
-          secUnit: m.product?.secondaryUnit || m.product?.unit || "",
-          priUnit: m.product?.unit || "",
+          secUnit: m.product?.secondaryUnit || m.product?.unit || "-",
+          priUnit: m.product?.unit || "-",
           remainingStock: Number(m.product?.currentStock || 0)
         };
       }

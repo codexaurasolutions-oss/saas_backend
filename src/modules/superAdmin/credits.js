@@ -24,35 +24,42 @@ superAdminCreditsRouter.get("/packages", asyncHandler(async (req, res) => {
   const packages = await prisma.creditPackage.findMany({
     orderBy: { credits: "asc" }
   });
-  res.json(packages);
+  res.json(packages.map(p => ({ ...p, price: p.priceInPaise / 100 })));
 }));
 
 // 3. Create or update a Credit Package
 superAdminCreditsRouter.post("/packages", asyncHandler(async (req, res) => {
-  const { name, credits, priceInPaise, description, isActive } = req.body;
+  const { name, credits, price, description, isActive } = req.body;
   
-  if (!name || !credits || !priceInPaise) {
+  if (!name || !credits || price === undefined) {
     return res.status(400).json({ message: "Name, credits, and price are required." });
   }
 
-  // We can use create or update depending on if an ID is passed, 
-  // but looking at ManageCreditsPage, it sends POST without an ID if new, 
-  // and PATCH /packages/:id if updating. Wait, let me check the frontend.
-  // Actually, the old superadminCreditRoutes used `upsert` by name. 
-  // Let's stick to the phase2 standard routes I made in owner/credits.js instead.
-  
   const pkg = await prisma.creditPackage.create({
-    data: { name, credits: Number(credits), priceInPaise: Number(priceInPaise), description: description || null, isActive: isActive !== undefined ? isActive : true }
+    data: { 
+      name, 
+      credits: Number(credits), 
+      priceInPaise: Math.round(Number(price) * 100), 
+      description: description || null, 
+      isActive: isActive !== undefined ? isActive : true 
+    }
   });
-  res.status(201).json(pkg);
+  res.status(201).json({ ...pkg, price: pkg.priceInPaise / 100 });
 }));
 
 // 3b. Update package
 superAdminCreditsRouter.patch("/packages/:id", asyncHandler(async (req, res) => {
   const pkg = await prisma.creditPackage.findUnique({ where: { id: req.params.id } });
   if (!pkg) return res.status(404).json({ message: "Package not found" });
-  const updated = await prisma.creditPackage.update({ where: { id: pkg.id }, data: req.body });
-  res.json(updated);
+  
+  const { price, ...rest } = req.body;
+  const updateData = { ...rest };
+  if (price !== undefined) {
+    updateData.priceInPaise = Math.round(Number(price) * 100);
+  }
+  
+  const updated = await prisma.creditPackage.update({ where: { id: pkg.id }, data: updateData });
+  res.json({ ...updated, price: updated.priceInPaise / 100 });
 }));
 
 // 3c. Delete package
