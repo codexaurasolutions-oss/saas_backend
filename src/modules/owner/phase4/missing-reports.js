@@ -581,21 +581,32 @@ export const registerMissingReportRoutes = (ownerRouter) => {
         grouped[key] = {
           product: m.product?.name || "Unknown",
           category: m.product?.category?.name || "-",
-          totalQuantity: 0,
-          value: 0
+          totalQuantityPrimary: 0,
+          value: 0,
+          netWeight: Number(m.product?.netWeight || 1),
+          secUnit: m.product?.secondaryUnit || m.product?.unit || "",
+          priUnit: m.product?.unit || "",
+          remainingStock: Number(m.product?.currentStock || 0)
         };
       }
       const qty = Math.abs(Number(m.quantity || 0));
-      grouped[key].totalQuantity += qty;
+      grouped[key].totalQuantityPrimary += qty;
       grouped[key].value += qty * Number(m.product?.costPrice || 0);
     });
-    const mapped = Object.values(grouped).map((g, idx) => ({
-      "Product": g.product,
-      "Category": g.category,
-      "Total Quantity Consumed": g.totalQuantity,
-      "Value": g.value
-    }));
-    res.json(appendTotalRow(mapped, "Product", "TOTAL", ["Total Quantity Consumed", "Value"]));
+    
+    const mapped = Object.values(grouped).map((g, idx) => {
+      let consumedSec = g.totalQuantityPrimary * (g.netWeight > 0 ? g.netWeight : 1);
+      return {
+        "Product": g.product,
+        "Category": g.category,
+        "Quantity Consumed": parseFloat(consumedSec.toFixed(2)),
+        "Sec. Unit": g.secUnit,
+        "Value": parseFloat(g.value.toFixed(2)),
+        "Remaining Stock": parseFloat(g.remainingStock.toFixed(2)),
+        "Pri. Unit": g.priUnit
+      };
+    });
+    res.json(appendTotalRow(mapped, "Product", "TOTAL", ["Value"]));
   });
 
   // ============ Purchase Order Report ============
