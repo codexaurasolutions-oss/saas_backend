@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireSalonRole } from "../middleware/authMiddleware.js";
+import { requireAuth, requireSystemRole } from "../middlewares/rbac.js";
 
 const router = express.Router();
 router.use(requireAuth);
@@ -16,7 +16,7 @@ if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
 }
 
 // 1. Get active packages
-router.get("/packages", requireSalonRole(["SALON_OWNER"]), async (req, res) => {
+router.get("/packages", requireSystemRole("SALON_OWNER"), async (req, res) => {
   try {
     const packages = await prisma.creditPackage.findMany({
       where: { isActive: true },
@@ -30,7 +30,7 @@ router.get("/packages", requireSalonRole(["SALON_OWNER"]), async (req, res) => {
 });
 
 // 2. Get current credits & transactions
-router.get("/status", requireSalonRole(["SALON_OWNER"]), async (req, res) => {
+router.get("/status", requireSystemRole("SALON_OWNER"), async (req, res) => {
   try {
     const salon = await prisma.salon.findUnique({
       where: { id: req.salonId },
@@ -51,7 +51,7 @@ router.get("/status", requireSalonRole(["SALON_OWNER"]), async (req, res) => {
 });
 
 // 3. Create Razorpay order
-router.post("/create-order", requireSalonRole(["SALON_OWNER"]), async (req, res) => {
+router.post("/create-order", requireSystemRole("SALON_OWNER"), async (req, res) => {
   const { packageName } = req.body;
   try {
     if (!razorpayInstance) return res.status(500).json({ error: "Payment gateway not configured" });
@@ -87,7 +87,7 @@ router.post("/create-order", requireSalonRole(["SALON_OWNER"]), async (req, res)
 });
 
 // 4. Verify Razorpay payment
-router.post("/verify-payment", requireSalonRole(["SALON_OWNER"]), async (req, res) => {
+router.post("/verify-payment", requireSystemRole("SALON_OWNER"), async (req, res) => {
   const { transactionId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
   try {
     const transaction = await prisma.creditTransaction.findUnique({ where: { id: transactionId } });
