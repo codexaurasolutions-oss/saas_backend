@@ -97,7 +97,7 @@ export const registerPublicPhase3Routes = (publicRouter) => {
     }));
     const branches = await prisma.branch.findMany({
       where: { salonId: salon.id, isActive: true },
-      select: { id: true, name: true },
+      select: { id: true, name: true, address: true },
       orderBy: { name: "asc" }
     });
     res.json({ services, branches });

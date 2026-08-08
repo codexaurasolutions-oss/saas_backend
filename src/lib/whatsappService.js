@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { deductCredits, hasEnoughCredits } from "./credits.js";
 
 /**
  * WhatsApp Business Cloud API service.
@@ -36,7 +37,7 @@ const sendWhatsAppMessage = async ({ to, message, templateName, templateParams, 
       template: {
         name: templateName,
         language: { code: "en_US" },
-        components: templateParams?.length ? [{ type: "body", parameters: templateParams.map((p) => ({ type: "text", text: p })) }] : []
+        components: templateParams?.length ? [{ type: "body", parameters: templateParams.map((p) => ({ type: "text", text: String(p || "") })) }] : []
       }
     };
   } else if (imageUrl) {
@@ -88,12 +89,25 @@ const sendWhatsAppMessage = async ({ to, message, templateName, templateParams, 
 export const sendWhatsApp = async ({ salonId, to, message, customerId, campaignId, templateName, templateParams, imageUrl }) => {
   if (!to) return { success: false, error: "Phone number required" };
 
+  // Check credits before sending
+  if (salonId) {
+    const enough = await hasEnoughCredits(salonId, "whatsapp");
+    if (!enough) {
+      return { success: false, error: "Insufficient credits. Please purchase more credits to send WhatsApp messages.", creditsRequired: 1, reason: "insufficient-credits" };
+    }
+  }
+
   const result = { success: false, provider: "whatsapp_cloud", messageId: null };
 
   try {
     const sendResult = await sendWhatsAppMessage({ to, message, templateName, templateParams, imageUrl });
     result.success = true;
     result.messageId = sendResult.messageId;
+
+    // Deduct credit after successful send
+    if (salonId) {
+      await deductCredits(salonId, "whatsapp").catch(() => {});
+    }
 
     await prisma.auditLog.create({
       data: {

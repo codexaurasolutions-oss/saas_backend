@@ -16,6 +16,7 @@ const isInsideIndia = (lat, lng) =>
 import { registerPhase2OwnerRoutes } from "./phase2/index.js";
 import { registerPhase3OwnerRoutes } from "./phase3/index.js";
 import { registerPhase4OwnerRoutes } from "./phase4/index.js";
+import { creditsRouter } from "./credits.js";
 import { getCampaignAudience } from "../../lib/phase3.js";
 
 export const ownerRouter = Router();
@@ -2272,5 +2273,6 @@ ownerRouter.get("/salon-details", requireSalonPermission("settings", "view"), as
 registerPhase2OwnerRoutes(ownerRouter);
 registerPhase3OwnerRoutes(ownerRouter);
 registerPhase4OwnerRoutes(ownerRouter);
+ownerRouter.use("/credits", creditsRouter);
 
 

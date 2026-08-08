@@ -33,7 +33,7 @@ const attachSalonSettings = async (req, res, next) => {
   next();
 };
 
-const sendInvoiceAutomationEmails = async (salonId, invoice) => {
+const sendInvoiceAutomationEmails = async (salonId, invoice, options = { skipWhatsapp: false }) => {
   const customerId = invoice?.customerId || null;
   const toEmail = invoice?.customer?.email || "";
   const toPhone = invoice?.customer?.phone || "";
@@ -50,16 +50,17 @@ const sendInvoiceAutomationEmails = async (salonId, invoice) => {
       context: { invoiceId: invoice?.id, customerId }
     }).catch(() => {});
   }
+  let whatsappResult = null;
   // Invoice WhatsApp
-  if (isOn("advanceReceivedInvoice") && whatsappEnabled && toPhone) {
-    await attemptCustomerTemplateWhatsApp({
+  if (!options.skipWhatsapp && isOn("advanceReceivedInvoice") && whatsappEnabled && toPhone) {
+    whatsappResult = await attemptCustomerTemplateWhatsApp({
       salonId,
       toPhone,
       templateType: "invoice_template",
       context: { invoiceId: invoice?.id, customerId },
       customerId,
       branchId
-    }).catch(() => {});
+    }).catch(e => ({ success: false, error: e.message }));
   }
 
   // Owner in-app notification (balanceClearedInvoice toggle)
@@ -212,6 +213,8 @@ const sendInvoiceAutomationEmails = async (salonId, invoice) => {
       }).catch(() => {});
     }
   }
+
+  return { whatsappResult };
 };
 
 export const registerBillingRoutes = (ownerRouter) => {
@@ -360,10 +363,16 @@ export const registerBillingRoutes = (ownerRouter) => {
   ownerRouter.post("/pos/invoices", requireFeatureEnabled("pos"), requireSalonPermission("pos", "create"), validate(schemas.invoice), async (req, res) => {
     try {
       const invoice = await createPosInvoice({ salonId: req.salonId, actorUser: req.user, body: req.body });
-      sendInvoiceAutomationEmails(req.salonId, invoice).catch(err => {
+      const { whatsappResult } = await sendInvoiceAutomationEmails(req.salonId, invoice, { skipWhatsapp: true }).catch(err => {
         console.error("Failed to send POS invoice automation emails:", err);
+        return { whatsappResult: null };
       });
-      res.status(201).json(invoice);
+
+      const payload = { ...invoice };
+      if (whatsappResult && whatsappResult.success === false && whatsappResult.error?.includes("Insufficient credits")) {
+        payload.whatsappFailedReason = "INSUFFICIENT_CREDITS";
+      }
+      res.status(201).json(payload);
     } catch (error) {
       return sendRouteError(res, error, "Could not create POS invoice");
     }
@@ -372,10 +381,16 @@ export const registerBillingRoutes = (ownerRouter) => {
   ownerRouter.post("/invoices", requireFeatureEnabled("pos"), requireSalonPermission("pos", "create"), validate(schemas.invoice), async (req, res) => {
     try {
       const invoice = await createPosInvoice({ salonId: req.salonId, actorUser: req.user, body: req.body });
-      sendInvoiceAutomationEmails(req.salonId, invoice).catch(err => {
+      const { whatsappResult } = await sendInvoiceAutomationEmails(req.salonId, invoice, { skipWhatsapp: true }).catch(err => {
         console.error("Failed to send invoice automation emails:", err);
+        return { whatsappResult: null };
       });
-      res.status(201).json(invoice);
+      
+      const payload = { ...invoice };
+      if (whatsappResult && whatsappResult.success === false && whatsappResult.error?.includes("Insufficient credits")) {
+        payload.whatsappFailedReason = "INSUFFICIENT_CREDITS";
+      }
+      res.status(201).json(payload);
     } catch (error) {
       return sendRouteError(res, error, "Could not create invoice");
     }
@@ -1170,16 +1185,8 @@ export const registerBillingRoutes = (ownerRouter) => {
         templateType: "invoice_template",
         context: { invoiceId: invoice.id, customerId: invoice.customerId }
       }).catch(() => {});
-      await attemptCustomerTemplateWhatsApp({
-        salonId: req.salonId,
-        toPhone: invoice.customer?.phone || "",
-        templateType: "invoice_template",
-        context: { invoiceId: invoice.id, customerId: invoice.customerId },
-        customerId: invoice.customerId,
-        branchId: invoice.branchId
-      }).catch(() => {});
-
-      res.json(finalInvoice);
+      const payload = { ...finalInvoice };
+      res.json(payload);
     } catch (error) {
       return sendRouteError(res, error, "Could not complete invoice");
     }
@@ -1219,15 +1226,21 @@ export const registerBillingRoutes = (ownerRouter) => {
       templateType: "payment_receipt_template",
       context: { invoiceId: invoice?.id, customerId: invoice?.customerId }
     }).catch(() => {});
-    await attemptCustomerTemplateWhatsApp({
+    const whatsappResult = await attemptCustomerTemplateWhatsApp({
       salonId: req.salonId,
       toPhone: invoice?.customer?.phone || "",
       templateType: "payment_receipt_template",
       context: { invoiceId: invoice?.id, customerId: invoice?.customerId },
       customerId: invoice?.customerId,
       branchId: invoice?.branchId
-    }).catch(() => {});
-    res.status(201).json(payment);
+    }).catch(e => ({ success: false, error: e.message }));
+    
+    const payload = { ...payment };
+    if (whatsappResult && whatsappResult.success === false && whatsappResult.error?.includes("Insufficient credits")) {
+      payload.whatsappFailedReason = "INSUFFICIENT_CREDITS";
+    }
+
+    res.status(201).json(payload);
   });
 
   ownerRouter.post("/payments/refund", requireSalonPermission("payments", "edit"), validate(schemas.refundPayment), async (req, res) => {
@@ -2046,6 +2059,38 @@ const pdfSafe = (str) => {
     });
     
     res.json(result);
+  });
+
+  ownerRouter.post("/invoices/:id/share-whatsapp", async (req, res) => {
+    try {
+      const invoice = await prisma.invoice.findFirst({
+        where: { id: req.params.id, salonId: req.salonId },
+        include: { customer: true }
+      });
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      if (!invoice.customer?.phone) return res.status(400).json({ error: "Customer has no phone number" });
+
+      const whatsappResult = await attemptCustomerTemplateWhatsApp({
+        salonId: req.salonId,
+        toPhone: invoice.customer.phone,
+        templateType: "invoice_template",
+        context: { invoiceId: invoice.id, customerId: invoice.customerId },
+        customerId: invoice.customerId,
+        branchId: invoice.branchId
+      }).catch(e => ({ success: false, error: e.message }));
+
+      if (whatsappResult && whatsappResult.success === false) {
+        if (whatsappResult.error?.includes("Insufficient credits")) {
+          return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Not Enough Credit: You don't have enough WhatsApp credits." });
+        }
+        return res.status(400).json({ error: "FAILED", message: whatsappResult.error });
+      }
+
+      res.json({ success: true, message: "WhatsApp message sent successfully" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
 };

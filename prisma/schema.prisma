@@ -358,6 +358,8 @@ model Salon {
   affiliateTransactions AffiliateCreditTransaction[]
   payoutRequests        CreditPayoutRequest[]
   websiteVisits         WebsiteVisit[]
+  credits               Int                      @default(0)
+  creditTransactions    CreditTransaction[]
 }
 
 model UserSalon {
@@ -1302,7 +1304,39 @@ model CatalogOffer {
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  salon       Salon     @relation(fields: [salonId], references: [id])
+  salon     Salon    @relation(fields: [salonId], references: [id])
+}
+
+model CreditPackage {
+  id            String   @id @default(cuid())
+  name          String
+  credits       Int
+  priceInPaise  Int
+  description   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions  CreditTransaction[]
+}
+
+model CreditTransaction {
+  id              String   @id @default(cuid())
+  salonId         String
+  packageName     String
+  credits         Int
+  amountPaidPaise Int
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  createdAt       DateTime @default(now())
+
+  salon           Salon    @relation(fields: [salonId], references: [id])
+  package         CreditPackage? @relation(fields: [packageName], references: [name])
+
+  @@index([salonId])
+  @@index([razorpayPaymentId])
 }
 
 model CatalogAnalyticsEvent {
