@@ -262,6 +262,7 @@ export const registerBillingRoutes = (ownerRouter) => {
         where: {
           salonId: req.salonId,
           isActive: true,
+          productType: "RETAIL",
           ...params
         },
         include: { category: true, branch: true },
