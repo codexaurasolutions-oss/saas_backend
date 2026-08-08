@@ -12,54 +12,6 @@ const razorpay = new Razorpay({
 
 export const creditsRouter = Router();
 
-// ─── Super Admin: Manage Credit Packages ───────────────────────────
-creditsRouter.get("/packages", requireAuth, requireSystemRole("SUPER_ADMIN"), asyncHandler(async (req, res) => {
-  const packages = await prisma.creditPackage.findMany({ orderBy: { createdAt: "desc" } });
-  res.json(packages);
-}));
-
-creditsRouter.post("/packages", requireAuth, requireSystemRole("SUPER_ADMIN"), asyncHandler(async (req, res) => {
-  const { name, credits, priceInPaise, description } = req.body;
-  if (!name || !credits || !priceInPaise) {
-    return res.status(400).json({ message: "Name, credits, and price are required" });
-  }
-  const pkg = await prisma.creditPackage.create({
-    data: { name, credits: Number(credits), priceInPaise: Number(priceInPaise), description: description || null }
-  });
-  res.status(201).json(pkg);
-}));
-
-creditsRouter.patch("/packages/:id", requireAuth, requireSystemRole("SUPER_ADMIN"), asyncHandler(async (req, res) => {
-  const pkg = await prisma.creditPackage.findUnique({ where: { id: req.params.id } });
-  if (!pkg) return res.status(404).json({ message: "Package not found" });
-  const updated = await prisma.creditPackage.update({ where: { id: pkg.id }, data: req.body });
-  res.json(updated);
-}));
-
-creditsRouter.delete("/packages/:id", requireAuth, requireSystemRole("SUPER_ADMIN"), asyncHandler(async (req, res) => {
-  const pkg = await prisma.creditPackage.findUnique({ where: { id: req.params.id } });
-  if (!pkg) return res.status(404).json({ message: "Package not found" });
-  await prisma.creditPackage.delete({ where: { id: pkg.id } });
-  res.json({ message: "Package deleted" });
-}));
-
-// ─── Super Admin: View All Salon Credits ───────────────────────────
-creditsRouter.get("/salons", requireAuth, requireSystemRole("SUPER_ADMIN"), asyncHandler(async (req, res) => {
-  const salons = await prisma.salon.findMany({
-    select: { id: true, name: true, slug: true, credits: true, status: true, createdAt: true },
-    orderBy: { credits: "desc" }
-  });
-  res.json(salons);
-}));
-
-creditsRouter.get("/salons/:salonId/transactions", requireAuth, requireSystemRole("SUPER_ADMIN"), asyncHandler(async (req, res) => {
-  const transactions = await prisma.creditTransaction.findMany({
-    where: { salonId: req.params.salonId },
-    orderBy: { createdAt: "desc" },
-    take: 100
-  });
-  res.json(transactions);
-}));
 
 // ─── Salon Owner: Get My Credits ───────────────────────────────────
 creditsRouter.get("/my-credits", requireAuth, asyncHandler(async (req, res) => {

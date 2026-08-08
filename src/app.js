@@ -11,9 +11,7 @@ import { authMiddleware } from "./middlewares/auth.js";
 import { errorHandler } from "./middlewares/error.js";
 import { router } from "./routes/index.js";
 import path from "node:path";
-import superadminCreditRoutes from "./routes/superadminCreditRoutes.js";
 import creditRoutes from "./routes/creditRoutes.js";
-
 dotenv.config();
 
 const parseNumber = (value, fallback) => {
@@ -109,7 +107,6 @@ export const createApp = ({
   app.use(authMiddlewareOverride);
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
   app.use("/api/v1", routerOverride);
-  app.use("/api/superadmin-credits", superadminCreditRoutes);
   app.use("/api/credits", creditRoutes);
   app.get("/health", (req, res) => res.json({
     ok: true,
