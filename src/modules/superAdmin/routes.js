@@ -10,8 +10,11 @@ import { runExpiredDemoCleanup } from "../../lib/trialCleanup.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { createAuditLog } from "../../lib/phase4.js";
 
+import { superAdminCreditsRouter } from "./credits.js";
+
 export const superAdminRouter = Router();
 superAdminRouter.use(requireAuth, requireSystemRole("SUPER_ADMIN"));
+superAdminRouter.use("/credits", superAdminCreditsRouter);
 
 const toAmount = (value) => Number(value || 0);
 const toDate = (value) => (value ? new Date(value) : null);
